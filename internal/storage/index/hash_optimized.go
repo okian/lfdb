@@ -16,9 +16,10 @@ import (
 
 // CPU feature flags for optimization
 var (
-	hasAVX2  = cpu.X86.HasAVX2
-	hasSSE42 = cpu.X86.HasSSE42
-	hasSSE2  = cpu.X86.HasSSE2
+	hasAVX2 = cpu.X86.HasAVX2
+	// hasSSE42 and hasSSE2 are available but not currently used in non-amd64 builds
+	// hasSSE42 = cpu.X86.HasSSE42
+	// hasSSE2  = cpu.X86.HasSSE2
 	// hasSSSE3 is available but not currently used
 	// hasSSSE3 = cpu.X86.HasSSSE3
 )
@@ -130,18 +131,24 @@ func bytesEqualOptimized(a, b []byte) bool {
 
 // bytesEqualAVX2 uses AVX2 instructions for 32-byte aligned comparisons
 // This is a fallback for non-amd64 builds
+//
+//nolint:unused
 func bytesEqualAVX2(a, b []byte) bool {
 	return bytesEqualScalar(a, b)
 }
 
 // bytesEqualSSE42 uses SSE4.2 instructions for 16-byte aligned comparisons
 // This is a fallback for non-amd64 builds
+//
+//nolint:unused
 func bytesEqualSSE42(a, b []byte) bool {
 	return bytesEqualScalar(a, b)
 }
 
 // bytesEqualSSE2 uses SSE2 instructions for 16-byte aligned comparisons
 // This is a fallback for non-amd64 builds
+//
+//nolint:unused
 func bytesEqualSSE2(a, b []byte) bool {
 	return bytesEqualScalar(a, b)
 }

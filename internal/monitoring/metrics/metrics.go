@@ -713,8 +713,8 @@ func (m *Metrics) ExportPrometheus() string {
 	var result string
 
 	// Operation counts
-	result += fmt.Sprintf("# HELP db_operations_total Total number of operations\n")
-	result += fmt.Sprintf("# TYPE db_operations_total counter\n")
+	result += "# HELP db_operations_total Total number of operations\n"
+	result += "# TYPE db_operations_total counter\n"
 	result += fmt.Sprintf("db_operations_total{operation=\"get\"} %d\n", stats.Operations.Get)
 	result += fmt.Sprintf("db_operations_total{operation=\"put\"} %d\n", stats.Operations.Put)
 	result += fmt.Sprintf("db_operations_total{operation=\"delete\"} %d\n", stats.Operations.Delete)
@@ -724,8 +724,8 @@ func (m *Metrics) ExportPrometheus() string {
 	result += fmt.Sprintf("db_operations_total{operation=\"batch_get\"} %d\n", stats.Operations.BatchGet)
 
 	// Latency averages
-	result += fmt.Sprintf("# HELP db_latency_nanoseconds Average latency for operations\n")
-	result += fmt.Sprintf("# TYPE db_latency_nanoseconds gauge\n")
+	result += "# HELP db_latency_nanoseconds Average latency for operations\n"
+	result += "# TYPE db_latency_nanoseconds gauge\n"
 	result += fmt.Sprintf("db_latency_nanoseconds{operation=\"get\"} %d\n", int64(stats.Latency.Get.Mean.Nanoseconds()))
 	result += fmt.Sprintf("db_latency_nanoseconds{operation=\"put\"} %d\n", int64(stats.Latency.Put.Mean.Nanoseconds()))
 	result += fmt.Sprintf("db_latency_nanoseconds{operation=\"delete\"} %d\n", int64(stats.Latency.Delete.Mean.Nanoseconds()))
@@ -733,32 +733,32 @@ func (m *Metrics) ExportPrometheus() string {
 	result += fmt.Sprintf("db_latency_nanoseconds{operation=\"txn\"} %d\n", int64(stats.Latency.Txn.Mean.Nanoseconds()))
 
 	// Error counts
-	result += fmt.Sprintf("# HELP db_errors_total Total number of errors\n")
-	result += fmt.Sprintf("# TYPE db_errors_total counter\n")
+	result += "# HELP db_errors_total Total number of errors\n"
+	result += "# TYPE db_errors_total counter\n"
 	result += fmt.Sprintf("db_errors_total{operation=\"get\"} %d\n", stats.Errors.Get)
 	result += fmt.Sprintf("db_errors_total{operation=\"put\"} %d\n", stats.Errors.Put)
 	result += fmt.Sprintf("db_errors_total{operation=\"delete\"} %d\n", stats.Errors.Delete)
 	result += fmt.Sprintf("db_errors_total{operation=\"txn\"} %d\n", stats.Errors.Txn)
 
 	// Memory metrics
-	result += fmt.Sprintf("# HELP db_memory_active_snapshots Number of active snapshots\n")
-	result += fmt.Sprintf("# TYPE db_memory_active_snapshots gauge\n")
+	result += "# HELP db_memory_active_snapshots Number of active snapshots\n"
+	result += "# TYPE db_memory_active_snapshots gauge\n"
 	result += fmt.Sprintf("db_memory_active_snapshots %d\n", stats.Memory.ActiveSnapshots)
 
-	result += fmt.Sprintf("# HELP db_memory_chain_length Average version chain length\n")
-	result += fmt.Sprintf("# TYPE db_memory_chain_length gauge\n")
+	result += "# HELP db_memory_chain_length Average version chain length\n"
+	result += "# TYPE db_memory_chain_length gauge\n"
 	result += fmt.Sprintf("db_memory_chain_length %d\n", stats.Memory.ChainLength)
 
-	result += fmt.Sprintf("# HELP db_memory_gc_trims Number of garbage collection operations\n")
-	result += fmt.Sprintf("# TYPE db_memory_gc_trims counter\n")
+	result += "# HELP db_memory_gc_trims Number of garbage collection operations\n"
+	result += "# TYPE db_memory_gc_trims counter\n"
 	result += fmt.Sprintf("db_memory_gc_trims %d\n", stats.Memory.GCTrims)
 
-	result += fmt.Sprintf("# HELP db_memory_heap_usage Heap usage in bytes\n")
-	result += fmt.Sprintf("# TYPE db_memory_heap_usage gauge\n")
+	result += "# HELP db_memory_heap_usage Heap usage in bytes\n"
+	result += "# TYPE db_memory_heap_usage gauge\n"
 	result += fmt.Sprintf("db_memory_heap_usage %d\n", stats.Memory.HeapUsage)
 
-	result += fmt.Sprintf("# HELP db_memory_allocation_count Total allocation count\n")
-	result += fmt.Sprintf("# TYPE db_memory_allocation_count counter\n")
+	result += "# HELP db_memory_allocation_count Total allocation count\n"
+	result += "# TYPE db_memory_allocation_count counter\n"
 	result += fmt.Sprintf("db_memory_allocation_count %d\n", stats.Memory.AllocationCount)
 
 	return result

@@ -332,7 +332,7 @@ func TestTruncateAndReuse(t *testing.T) {
 	}
 
 	// Verify old data is not accessible
-	val, exists = database.Get(ctx, []byte("key1"))
+	_, exists = database.Get(ctx, []byte("key1"))
 	if exists {
 		t.Errorf("Old data should not be accessible after truncate")
 	}

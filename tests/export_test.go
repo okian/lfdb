@@ -357,11 +357,13 @@ func TestImportWithSnapshots(t *testing.T) {
 				if _, exists := newDatabase.Get(ctx, []byte("key4")); exists {
 					// This might be acceptable depending on implementation
 					// Just verify the operation doesn't crash
+					_ = exists // Suppress unused variable warning
 				}
 
 				if _, exists := newDatabase.Get(ctx, []byte("key5")); exists {
 					// This might be acceptable depending on implementation
 					// Just verify the operation doesn't crash
+					_ = exists // Suppress unused variable warning
 				}
 			})
 		})
