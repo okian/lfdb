@@ -58,9 +58,16 @@ jobs:
 
       - name: Build all binaries
         run: |
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build ./cmd/...
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o bin/throughput ./cmd/throughput
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o bin/throughput-optimized ./cmd/throughput_optimized
+          # Map GitHub runner OS to GOOS
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            export GOOS=linux
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            export GOOS=windows
+          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
+            export GOOS=darwin
+          fi
+          export GOARCH=${{ matrix.arch }}
+          go build ./cmd/...
 
   # Unit tests matrix - runs in parallel across OS/arch combinations
   unit-tests:
@@ -226,9 +233,9 @@ jobs:
           cache: true
 
       - name: Run gosec security scanner
-        uses: securecodewarrior/github-action-gosec@master
-        with:
-          args: '-fmt sarif -out results.sarif ./...'
+        run: |
+          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+          gosec -fmt sarif -out results.sarif ./...
 
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v2

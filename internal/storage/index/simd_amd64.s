@@ -4,7 +4,7 @@
 
 #include "textflag.h"
 
-// bytesEqualAVX2 compares two byte slices using AVX2 instructions
+// bytesEqualAVX2 compares two byte slices using optimized scalar instructions
 // func bytesEqualAVX2(a, b []byte) bool
 TEXT ·bytesEqualAVX2(SB), NOSPLIT, $0-49
 	MOVQ a_base+0(FP), SI    // a.ptr
@@ -20,26 +20,24 @@ TEXT ·bytesEqualAVX2(SB), NOSPLIT, $0-49
 	CMPQ CX, $0
 	JE   equal
 	
-	// Check if length is less than 32 bytes
-	CMPQ CX, $32
+	// Use optimized scalar comparison for 8-byte chunks
+	CMPQ CX, $8
 	JL   scalar_compare
 	
-	// Use AVX2 for 32-byte chunks
+	// Compare 8-byte chunks
 	MOVQ CX, AX
-	SHRQ $5, AX              // AX = len / 32
-	SHLQ $5, AX              // AX = (len / 32) * 32
+	SHRQ $3, AX              // AX = len / 8
+	SHLQ $3, AX              // AX = (len / 8) * 8
 	SUBQ AX, CX              // CX = remaining bytes
 	
-	// Compare 32-byte chunks
+	// Compare 8-byte chunks
 chunk_loop:
-	VMOVDQU (SI), Y0         // Load 32 bytes from a
-	VPCMPEQB (DI), Y0, Y1    // Compare with b
-	VPMOVMSKB Y1, AX         // Get mask of equal bytes
-	CMPL AX, $0xFFFFFFFF     // Check if all 32 bytes are equal
+	MOVQ (SI), AX            // Load 8 bytes from a
+	CMPQ AX, (DI)            // Compare with b
 	JNE  not_equal
-	ADDQ $32, SI
-	ADDQ $32, DI
-	SUBQ $32, AX
+	ADDQ $8, SI
+	ADDQ $8, DI
+	SUBQ $8, AX
 	JNZ  chunk_loop
 	
 	// Handle remaining bytes
@@ -60,7 +58,7 @@ not_equal:
 	MOVB $0, ret+48(FP)
 	RET
 
-// bytesEqualSSE42 compares two byte slices using SSE4.2 instructions
+// bytesEqualSSE42 compares two byte slices using optimized scalar instructions
 // func bytesEqualSSE42(a, b []byte) bool
 TEXT ·bytesEqualSSE42(SB), NOSPLIT, $0-49
 	MOVQ a_base+0(FP), SI    // a.ptr
@@ -76,26 +74,24 @@ TEXT ·bytesEqualSSE42(SB), NOSPLIT, $0-49
 	CMPQ CX, $0
 	JE   equal
 	
-	// Check if length is less than 16 bytes
-	CMPQ CX, $16
+	// Use optimized scalar comparison for 8-byte chunks
+	CMPQ CX, $8
 	JL   scalar_compare
 	
-	// Use SSE4.2 for 16-byte chunks
+	// Compare 8-byte chunks
 	MOVQ CX, AX
-	SHRQ $4, AX              // AX = len / 16
-	SHLQ $4, AX              // AX = (len / 16) * 16
+	SHRQ $3, AX              // AX = len / 8
+	SHLQ $3, AX              // AX = (len / 8) * 8
 	SUBQ AX, CX              // CX = remaining bytes
 	
-	// Compare 16-byte chunks
+	// Compare 8-byte chunks
 chunk_loop:
-	MOVDQU (SI), X0          // Load 16 bytes from a
-	PCMPEQB (DI), X0         // Compare with b
-	PMOVMSKB X0, AX          // Get mask of equal bytes
-	CMPL AX, $0xFFFF         // Check if all 16 bytes are equal
+	MOVQ (SI), AX            // Load 8 bytes from a
+	CMPQ AX, (DI)            // Compare with b
 	JNE  not_equal
-	ADDQ $16, SI
-	ADDQ $16, DI
-	SUBQ $16, AX
+	ADDQ $8, SI
+	ADDQ $8, DI
+	SUBQ $8, AX
 	JNZ  chunk_loop
 	
 	// Handle remaining bytes
@@ -116,7 +112,7 @@ not_equal:
 	MOVB $0, ret+48(FP)
 	RET
 
-// bytesEqualSSE2 compares two byte slices using SSE2 instructions
+// bytesEqualSSE2 compares two byte slices using optimized scalar instructions
 // func bytesEqualSSE2(a, b []byte) bool
 TEXT ·bytesEqualSSE2(SB), NOSPLIT, $0-49
 	MOVQ a_base+0(FP), SI    // a.ptr
@@ -132,27 +128,24 @@ TEXT ·bytesEqualSSE2(SB), NOSPLIT, $0-49
 	CMPQ CX, $0
 	JE   equal
 	
-	// Check if length is less than 16 bytes
-	CMPQ CX, $16
+	// Use optimized scalar comparison for 8-byte chunks
+	CMPQ CX, $8
 	JL   scalar_compare
 	
-	// Use SSE2 for 16-byte chunks
+	// Compare 8-byte chunks
 	MOVQ CX, AX
-	SHRQ $4, AX              // AX = len / 16
-	SHLQ $4, AX              // AX = (len / 16) * 16
+	SHRQ $3, AX              // AX = len / 8
+	SHLQ $3, AX              // AX = (len / 8) * 8
 	SUBQ AX, CX              // CX = remaining bytes
 	
-	// Compare 16-byte chunks
+	// Compare 8-byte chunks
 chunk_loop:
-	MOVDQU (SI), X0          // Load 16 bytes from a
-	MOVDQU (DI), X1          // Load 16 bytes from b
-	PCMPEQB X1, X0           // Compare bytes
-	PMOVMSKB X0, AX          // Get mask of equal bytes
-	CMPL AX, $0xFFFF         // Check if all 16 bytes are equal
+	MOVQ (SI), AX            // Load 8 bytes from a
+	CMPQ AX, (DI)            // Compare with b
 	JNE  not_equal
-	ADDQ $16, SI
-	ADDQ $16, DI
-	SUBQ $16, AX
+	ADDQ $8, SI
+	ADDQ $8, DI
+	SUBQ $8, AX
 	JNZ  chunk_loop
 	
 	// Handle remaining bytes
