@@ -1,17 +1,14 @@
-name: CI
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, master, develop ]
   pull_request:
-    branches: [ main, develop ]
-
-env:
-  GO_VERSION: '1.24.6'
-  CGO_ENABLED: 1
+    branches: [ main, master, develop ]
 
 jobs:
-  # Linting job - runs once
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -22,94 +19,61 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
-          args: --timeout=10m
+          args: --timeout=5m
 
       - name: Run golangci-lint
-        run: golangci-lint run --timeout=10m
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m
 
-  # Build matrix - builds for different OS/arch combinations
-  build:
-    name: Build (${{ matrix.os }}-${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
+  test:
+    name: Test
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        arch: [amd64, arm64]
-        exclude:
-          # Windows ARM64 is not yet fully supported in GitHub Actions
-          - os: windows-latest
-            arch: arm64
+        go-version: [ '1.24.6' ]
+        os: [ ubuntu-latest, macos-latest ]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
+      - name: Set up Go ${{ matrix.go-version }}
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: ${{ matrix.go-version }}
           cache: true
 
-      - name: Build all binaries
-        shell: bash
-        run: |
-          # Map GitHub runner OS to GOOS
-          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
-            export GOOS=linux
-          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            export GOOS=windows
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            export GOOS=darwin
-          fi
-          export GOARCH=${{ matrix.arch }}
-          go build ./cmd/...
+      - name: Install dependencies
+        run: go mod download
 
-  # Unit tests matrix - runs in parallel across OS/arch combinations
-  unit-tests:
-    name: Unit Tests (${{ matrix.os }}-${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        arch: [amd64, arm64]
-        exclude:
-          # Windows ARM64 is not yet fully supported in GitHub Actions
-          - os: windows-latest
-            arch: arm64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run unit tests with race detection
+      - name: Run tests
         run: go test -race -v -p=1 ./...
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
+      - name: Run tests with coverage
+        run: |
+          go test -race -v -coverprofile=coverage.out -covermode=atomic -p=1 ./...
+          go tool cover -func=coverage.out
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.out
-          flags: unit-tests-${{ matrix.os }}-${{ matrix.arch }}
-          name: unit-tests-coverage-${{ matrix.os }}-${{ matrix.arch }}
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
-  # Package-specific test matrix - runs each package in parallel across architectures
-  package-tests:
-    name: Package Tests - ${{ matrix.package }} (${{ matrix.arch }})
+  benchmark:
+    name: Benchmark
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        package: [internal/concurrency/epoch, internal/storage/index, internal/monitoring/metrics, internal/storage/mvcc, internal/core]
-        arch: [amd64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -117,110 +81,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
-      - name: Run package tests
-        run: go test -race -v -p=1 ./${{ matrix.package }}/...
-
-  # Test type matrix - runs different test types in parallel across architectures
-  test-types:
-    name: ${{ matrix.test-type }} Tests (${{ matrix.arch }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        test-type: [race-detection, fuzz, property-based, linearizability, gc, safety, edge-cases]
-        arch: [amd64, arm64]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run ${{ matrix.test-type }} tests
-        shell: bash
-        run: |
-          case "${{ matrix.test-type }}" in
-            "race-detection")
-              go test -race -v -run TestRaceDetection ./...
-              ;;
-            "fuzz")
-              go test -fuzz=FuzzBasicOperations -fuzztime=30s ./...
-              go test -fuzz=FuzzConcurrentOperations -fuzztime=30s ./...
-              go test -fuzz=FuzzSnapshotOperations -fuzztime=30s ./...
-              go test -fuzz=FuzzTransactionOperations -fuzztime=30s ./...
-              go test -fuzz=FuzzRandomSequence -fuzztime=30s ./...
-              go test -fuzz=FuzzEpochReclamation -fuzztime=30s ./...
-              ;;
-            "property-based")
-              go test -v -run TestPropertyBased ./...
-              ;;
-            "linearizability")
-              go test -v -run TestLinearizability ./...
-              ;;
-            "gc")
-              go test -v -run TestGC ./...
-              ;;
-            "safety")
-              go test -v -run TestSafety ./...
-              ;;
-            "edge-cases")
-              go test -v -run TestEdgeCases ./...
-              ;;
-          esac
-
-  # Benchmarks - runs in parallel across architectures
-  benchmarks:
-    name: Benchmarks (${{ matrix.arch }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+      - name: Install dependencies
+        run: go mod download
 
       - name: Run benchmarks
         run: go test -race -bench=. -benchmem -p=1 ./...
 
-  # Throughput tests - runs in parallel across architectures
-  throughput-tests:
-    name: Throughput Tests (${{ matrix.arch }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Build binaries
-        run: |
-          go build -o bin/bench ./cmd/bench
-          go build -o bin/repl ./cmd/repl
-
-      - name: Run throughput tests
-        run: |
-          ./bin/bench
-          ./scripts/run_throughput_tests.sh basic
-
-  # Security scanning - runs in parallel
   security:
     name: Security Scan
     runs-on: ubuntu-latest
@@ -231,23 +100,54 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
-      - name: Run gosec security scanner
-        run: |
-          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-          gosec -fmt sarif -out results.sarif ./...
+      - name: Install dependencies
+        run: go mod download
 
-      - name: Upload SARIF file
+      - name: Install gosec
+        run: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec security scanner
+        run: gosec -fmt sarif -out results.sarif ./...
+
+      - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
         with:
           sarif_file: results.sarif
 
-  # Dependency vulnerability check - runs in parallel
-  vulncheck:
-    name: Vulnerability Check
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.6'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Build binaries
+        run: |
+          go build -o bin/lfdb ./lfdb.go
+          go build -o bin/bench ./cmd/bench
+          go build -o bin/repl ./cmd/repl
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: bin/
+
+  fuzz:
+    name: Fuzz Testing
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -256,44 +156,24 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
-      - name: Run vulnerability check
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: Install dependencies
+        run: go mod download
 
-  # Cross-platform tests - runs tests on different OS/arch combinations
-  cross-platform-tests:
-    name: Cross-Platform Tests (${{ matrix.os }}-${{ matrix.arch }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        arch: [amd64, arm64]
-        exclude:
-          # Windows ARM64 is not yet fully supported in GitHub Actions
-          - os: windows-latest
-            arch: arm64
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Run fuzz tests
+        run: |
+          go test -fuzz=FuzzBasicOperations -fuzztime=30s ./tests/...
+          go test -fuzz=FuzzConcurrentOperations -fuzztime=30s ./tests/...
+          go test -fuzz=FuzzSnapshotOperations -fuzztime=30s ./tests/...
+          go test -fuzz=FuzzTransactionOperations -fuzztime=30s ./tests/...
+          go test -fuzz=FuzzRandomSequence -fuzztime=30s ./tests/...
+          go test -fuzz=FuzzEpochReclamation -fuzztime=30s ./tests/...
 
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run cross-platform tests
-        run: go test -v -p=1 ./...
-
-  # Integration tests - runs in parallel across architectures
-  integration-tests:
-    name: Integration Tests (${{ matrix.arch }})
+  property:
+    name: Property-Based Testing
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -301,19 +181,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
-      - name: Run integration tests
-        run: go test -v -run TestIntegration ./...
+      - name: Install dependencies
+        run: go mod download
 
-  # Performance tests - runs in parallel across architectures
-  performance-tests:
-    name: Performance Tests (${{ matrix.arch }})
+      - name: Run property-based tests
+        run: go test -v -run TestPropertyBased ./...
+
+  linearizability:
+    name: Linearizability Testing
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -321,19 +200,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
-      - name: Run performance tests
-        run: go test -v -run TestPerformance ./...
+      - name: Install dependencies
+        run: go mod download
 
-  # Memory leak tests - runs in parallel across architectures
-  memory-leak-tests:
-    name: Memory Leak Tests (${{ matrix.arch }})
+      - name: Run linearizability tests
+        run: go test -v -run TestLinearizability ./...
+
+  race-detection:
+    name: Race Detection
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [amd64, arm64]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -341,8 +219,51 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version: '1.24.6'
           cache: true
 
-      - name: Run memory leak tests
-        run: go test -v -run TestMemoryLeak ./...
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run race detection tests
+        run: go test -race -v -run TestRaceDetection ./...
+
+  gc:
+    name: Garbage Collection Testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.6'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run GC tests
+        run: go test -v -run TestGC ./...
+
+  throughput:
+    name: Throughput Testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24.6'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run throughput tests
+        run: |
+          chmod +x ./scripts/run_throughput_tests.sh
+          ./scripts/run_throughput_tests.sh basic

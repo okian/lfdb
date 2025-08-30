@@ -24,10 +24,13 @@ TEXT ·bytesEqualAVX2(SB), NOSPLIT, $0-49
 	CMPQ CX, $8
 	JL   scalar_compare
 	
-	// Compare 8-byte chunks
+	// Calculate number of 8-byte chunks
 	MOVQ CX, AX
-	SHRQ $3, AX              // AX = len / 8
-	SHLQ $3, AX              // AX = (len / 8) * 8
+	SHRQ $3, AX              // AX = number of 8-byte chunks
+	MOVQ AX, DX              // Save chunk count in DX
+	
+	// Calculate remaining bytes
+	SHLQ $3, AX              // AX = (chunks * 8)
 	SUBQ AX, CX              // CX = remaining bytes
 	
 	// Compare 8-byte chunks
@@ -37,7 +40,7 @@ chunk_loop:
 	JNE  not_equal
 	ADDQ $8, SI
 	ADDQ $8, DI
-	SUBQ $8, AX
+	DECQ DX                  // Decrement chunk counter
 	JNZ  chunk_loop
 	
 	// Handle remaining bytes
@@ -78,10 +81,13 @@ TEXT ·bytesEqualSSE42(SB), NOSPLIT, $0-49
 	CMPQ CX, $8
 	JL   scalar_compare
 	
-	// Compare 8-byte chunks
+	// Calculate number of 8-byte chunks
 	MOVQ CX, AX
-	SHRQ $3, AX              // AX = len / 8
-	SHLQ $3, AX              // AX = (len / 8) * 8
+	SHRQ $3, AX              // AX = number of 8-byte chunks
+	MOVQ AX, DX              // Save chunk count in DX
+	
+	// Calculate remaining bytes
+	SHLQ $3, AX              // AX = (chunks * 8)
 	SUBQ AX, CX              // CX = remaining bytes
 	
 	// Compare 8-byte chunks
@@ -91,7 +97,7 @@ chunk_loop:
 	JNE  not_equal
 	ADDQ $8, SI
 	ADDQ $8, DI
-	SUBQ $8, AX
+	DECQ DX                  // Decrement chunk counter
 	JNZ  chunk_loop
 	
 	// Handle remaining bytes
@@ -132,10 +138,13 @@ TEXT ·bytesEqualSSE2(SB), NOSPLIT, $0-49
 	CMPQ CX, $8
 	JL   scalar_compare
 	
-	// Compare 8-byte chunks
+	// Calculate number of 8-byte chunks
 	MOVQ CX, AX
-	SHRQ $3, AX              // AX = len / 8
-	SHLQ $3, AX              // AX = (len / 8) * 8
+	SHRQ $3, AX              // AX = number of 8-byte chunks
+	MOVQ AX, DX              // Save chunk count in DX
+	
+	// Calculate remaining bytes
+	SHLQ $3, AX              // AX = (chunks * 8)
 	SUBQ AX, CX              // CX = remaining bytes
 	
 	// Compare 8-byte chunks
@@ -145,7 +154,7 @@ chunk_loop:
 	JNE  not_equal
 	ADDQ $8, SI
 	ADDQ $8, DI
-	SUBQ $8, AX
+	DECQ DX                  // Decrement chunk counter
 	JNZ  chunk_loop
 	
 	// Handle remaining bytes

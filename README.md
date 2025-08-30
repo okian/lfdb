@@ -266,6 +266,47 @@ make bench
 ./scripts/run_throughput_tests.sh
 ```
 
+## Development
+
+### Linting and Code Quality
+
+The project uses comprehensive linting and security scanning tools:
+
+```bash
+# Install development tools
+make tools
+
+# Run all linting and security checks
+make lint-all
+
+# Run individual checks
+make lint          # golangci-lint
+make security      # gosec security scanner
+make vulncheck     # vulnerability check
+
+# Run the comprehensive linting script
+./scripts/lint.sh
+
+# Set up pre-commit hooks
+pre-commit install
+```
+
+### Available Linting Tools
+
+- **golangci-lint**: Comprehensive Go linter with 50+ linters
+- **gosec**: Security-focused static analysis
+- **govulncheck**: Vulnerability scanning for dependencies
+- **pre-commit**: Git hooks for automated checks
+
+### Code Quality Standards
+
+The project follows strict code quality standards:
+- All code must pass golangci-lint with zero issues
+- Security vulnerabilities are treated as build failures
+- Code formatting is enforced via gofmt
+- Import organization via goimports
+- Comprehensive test coverage required
+
 ## Testing
 
 ```bash
