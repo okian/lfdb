@@ -57,6 +57,7 @@ jobs:
           cache: true
 
       - name: Build all binaries
+        shell: bash
         run: |
           # Map GitHub runner OS to GOOS
           if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
@@ -107,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: [internal/epoch, internal/index, internal/metrics, internal/mvcc, pkg/db]
+        package: [internal/concurrency/epoch, internal/storage/index, internal/monitoring/metrics, internal/storage/mvcc, internal/core]
         arch: [amd64, arm64]
     steps:
       - name: Checkout code
@@ -141,18 +142,19 @@ jobs:
           cache: true
 
       - name: Run ${{ matrix.test-type }} tests
+        shell: bash
         run: |
           case "${{ matrix.test-type }}" in
             "race-detection")
               go test -race -v -run TestRaceDetection ./...
               ;;
             "fuzz")
-              go test -fuzz=FuzzBasicOperations -fuzztime=30s ./pkg/db/...
-              go test -fuzz=FuzzConcurrentOperations -fuzztime=30s ./pkg/db/...
-              go test -fuzz=FuzzSnapshotOperations -fuzztime=30s ./pkg/db/...
-              go test -fuzz=FuzzTransactionOperations -fuzztime=30s ./pkg/db/...
-              go test -fuzz=FuzzRandomSequence -fuzztime=30s ./pkg/db/...
-              go test -fuzz=FuzzEpochReclamation -fuzztime=30s ./pkg/db/...
+              go test -fuzz=FuzzBasicOperations -fuzztime=30s ./...
+              go test -fuzz=FuzzConcurrentOperations -fuzztime=30s ./...
+              go test -fuzz=FuzzSnapshotOperations -fuzztime=30s ./...
+              go test -fuzz=FuzzTransactionOperations -fuzztime=30s ./...
+              go test -fuzz=FuzzRandomSequence -fuzztime=30s ./...
+              go test -fuzz=FuzzEpochReclamation -fuzztime=30s ./...
               ;;
             "property-based")
               go test -v -run TestPropertyBased ./...
@@ -208,14 +210,14 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Build throughput binaries
+      - name: Build binaries
         run: |
-          go build -o bin/throughput ./cmd/throughput
-          go build -o bin/throughput-optimized ./cmd/throughput_optimized
+          go build -o bin/bench ./cmd/bench
+          go build -o bin/repl ./cmd/repl
 
       - name: Run throughput tests
         run: |
-          ./bin/throughput-optimized -duration=10s -goroutines=4 -batch-size=100
+          ./bin/bench
           ./scripts/run_throughput_tests.sh basic
 
   # Security scanning - runs in parallel
@@ -238,7 +240,7 @@ jobs:
           gosec -fmt sarif -out results.sarif ./...
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: results.sarif
