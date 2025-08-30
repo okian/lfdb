@@ -1,0 +1,339 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  GO_VERSION: '1.24.6'
+  CGO_ENABLED: 1
+
+jobs:
+  # Linting job - runs once
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=10m
+
+      - name: Run golangci-lint
+        run: golangci-lint run --timeout=10m
+
+  # Build matrix - builds for different OS/arch combinations
+  build:
+    name: Build (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [amd64, arm64]
+        exclude:
+          # Windows ARM64 is not yet fully supported in GitHub Actions
+          - os: windows-latest
+            arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build all binaries
+        run: |
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build ./cmd/...
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o bin/throughput ./cmd/throughput
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -o bin/throughput-optimized ./cmd/throughput_optimized
+
+  # Unit tests matrix - runs in parallel across OS/arch combinations
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [amd64, arm64]
+        exclude:
+          # Windows ARM64 is not yet fully supported in GitHub Actions
+          - os: windows-latest
+            arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run unit tests with race detection
+        run: go test -race -v -p=1 ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.out
+          flags: unit-tests-${{ matrix.os }}-${{ matrix.arch }}
+          name: unit-tests-coverage-${{ matrix.os }}-${{ matrix.arch }}
+
+  # Package-specific test matrix - runs each package in parallel across architectures
+  package-tests:
+    name: Package Tests - ${{ matrix.package }} (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [internal/epoch, internal/index, internal/metrics, internal/mvcc, pkg/db]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run package tests
+        run: go test -race -v -p=1 ./${{ matrix.package }}/...
+
+  # Test type matrix - runs different test types in parallel across architectures
+  test-types:
+    name: ${{ matrix.test-type }} Tests (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test-type: [race-detection, fuzz, property-based, linearizability, gc, safety, edge-cases]
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run ${{ matrix.test-type }} tests
+        run: |
+          case "${{ matrix.test-type }}" in
+            "race-detection")
+              go test -race -v -run TestRaceDetection ./...
+              ;;
+            "fuzz")
+              go test -fuzz=FuzzBasicOperations -fuzztime=30s ./pkg/db/...
+              go test -fuzz=FuzzConcurrentOperations -fuzztime=30s ./pkg/db/...
+              go test -fuzz=FuzzSnapshotOperations -fuzztime=30s ./pkg/db/...
+              go test -fuzz=FuzzTransactionOperations -fuzztime=30s ./pkg/db/...
+              go test -fuzz=FuzzRandomSequence -fuzztime=30s ./pkg/db/...
+              go test -fuzz=FuzzEpochReclamation -fuzztime=30s ./pkg/db/...
+              ;;
+            "property-based")
+              go test -v -run TestPropertyBased ./...
+              ;;
+            "linearizability")
+              go test -v -run TestLinearizability ./...
+              ;;
+            "gc")
+              go test -v -run TestGC ./...
+              ;;
+            "safety")
+              go test -v -run TestSafety ./...
+              ;;
+            "edge-cases")
+              go test -v -run TestEdgeCases ./...
+              ;;
+          esac
+
+  # Benchmarks - runs in parallel across architectures
+  benchmarks:
+    name: Benchmarks (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run benchmarks
+        run: go test -race -bench=. -benchmem -p=1 ./...
+
+  # Throughput tests - runs in parallel across architectures
+  throughput-tests:
+    name: Throughput Tests (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build throughput binaries
+        run: |
+          go build -o bin/throughput ./cmd/throughput
+          go build -o bin/throughput-optimized ./cmd/throughput_optimized
+
+      - name: Run throughput tests
+        run: |
+          ./bin/throughput-optimized -duration=10s -goroutines=4 -batch-size=100
+          ./scripts/run_throughput_tests.sh basic
+
+  # Security scanning - runs in parallel
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run gosec security scanner
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: '-fmt sarif -out results.sarif ./...'
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: results.sarif
+
+  # Dependency vulnerability check - runs in parallel
+  vulncheck:
+    name: Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # Cross-platform tests - runs tests on different OS/arch combinations
+  cross-platform-tests:
+    name: Cross-Platform Tests (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        arch: [amd64, arm64]
+        exclude:
+          # Windows ARM64 is not yet fully supported in GitHub Actions
+          - os: windows-latest
+            arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run cross-platform tests
+        run: go test -v -p=1 ./...
+
+  # Integration tests - runs in parallel across architectures
+  integration-tests:
+    name: Integration Tests (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run integration tests
+        run: go test -v -run TestIntegration ./...
+
+  # Performance tests - runs in parallel across architectures
+  performance-tests:
+    name: Performance Tests (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run performance tests
+        run: go test -v -run TestPerformance ./...
+
+  # Memory leak tests - runs in parallel across architectures
+  memory-leak-tests:
+    name: Memory Leak Tests (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run memory leak tests
+        run: go test -v -run TestMemoryLeak ./...
