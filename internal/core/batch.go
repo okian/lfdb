@@ -189,10 +189,24 @@ func (b *Batch[K, V]) Size() int {
 	return len(b.operations)
 }
 
-// Clear clears all operations from the batch
+// Clear removes all operations and results from the batch.
+//
+// This method resets the batch to its initial state and ensures that
+// references held by the underlying slices are released so the garbage
+// collector can reclaim memory. Failing to clear these references would
+// cause the batch to retain pointers to previously stored keys and values,
+// potentially preventing large objects from being collected.
 func (b *Batch[K, V]) Clear() {
+	for i := range b.operations {
+		b.operations[i] = BatchOperation[K, V]{}
+	}
 	b.operations = b.operations[:0]
+
+	for i := range b.results {
+		b.results[i] = BatchResult[V]{}
+	}
 	b.results = b.results[:0]
+
 	b.committed = false
 }
 
