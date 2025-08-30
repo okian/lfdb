@@ -56,7 +56,7 @@ chunk_loop:
         JE   equal
 
 scalar_compare:
-        MOVQ CX, AX              // Load remainder length
+        // CX already contains the remaining byte count for REP; CMPSB
         REP; CMPSB               // Compare remaining bytes
         JNE  not_equal
         JMP  equal
@@ -108,7 +108,7 @@ chunk_loop:
         JE   equal
 
 scalar_compare:
-        MOVQ CX, AX              // Load remainder length
+        // CX already contains the remaining byte count for REP; CMPSB
         REP; CMPSB               // Compare remaining bytes
         JNE  not_equal
         JMP  equal
@@ -160,7 +160,7 @@ chunk_loop:
         JE   equal
 
 scalar_compare:
-        MOVQ CX, AX              // Load remainder length
+        // CX already contains the remaining byte count for REP; CMPSB
         REP; CMPSB               // Compare remaining bytes
         JNE  not_equal
         JMP  equal
