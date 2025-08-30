@@ -88,14 +88,28 @@ help:
 	@echo "  throughput-optimized - Run optimized throughput test"
 	@echo "  throughput-all - Run all throughput tests"
 	@echo "  throughput-realtime - Run real-time throughput test"
-	@echo "  lint          - Run linter"
+	@echo "  lint          - Run golangci-lint"
+	@echo "  security      - Run gosec security scanner"
+	@echo "  vulncheck     - Run vulnerability check"
+	@echo "  lint-all      - Run all linting and security checks"
 	@echo "  check         - Run lint and tests"
 	@echo "  build         - Build all binaries"
 	@echo "  clean         - Clean build artifacts"
 
 # Run linter
 lint:
-	golangci-lint run
+	golangci-lint run --timeout=5m
+
+# Run security scanner
+security:
+	gosec -fmt sarif -out results.sarif ./...
+
+# Run vulnerability check
+vulncheck:
+	govulncheck ./...
+
+# Run all linting and security checks
+lint-all: lint security vulncheck
 
 # Clean build artifacts
 clean:
@@ -108,7 +122,7 @@ deps:
 	go mod tidy
 
 # Run all checks
-check: lint test race
+check: lint-all test race
 
 # Build all binaries
 build:
@@ -119,3 +133,7 @@ build:
 # Install tools
 tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+	pip install pre-commit
+	pre-commit install

@@ -16,6 +16,7 @@ type DynamicHashIndex[V any] struct {
 	loadFactor float64
 	maxLoad    float64
 	entryCount atomic.Int64
+	resizeMu   sync.RWMutex // Protects resize operations
 }
 
 // NewDynamicHashIndex creates a new dynamic hash index
@@ -60,14 +61,19 @@ func (h *DynamicHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
 	// Check if we need to resize
 	h.checkResize()
 
-	// Check if entry already exists
+	// Use read lock for accessing the hash index
+	h.resizeMu.RLock()
 	existingEntry := h.HashIndex.Get(key)
+	h.resizeMu.RUnlock()
+
 	if existingEntry != nil {
 		return existingEntry
 	}
 
-	// Use the parent implementation to create new entry
+	// Use read lock for creating new entry
+	h.resizeMu.RLock()
 	entry := h.HashIndex.GetOrCreate(key)
+	h.resizeMu.RUnlock()
 
 	// Increment entry count only for new entries
 	if entry != nil {
@@ -79,15 +85,29 @@ func (h *DynamicHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
 
 // checkResize checks if the index needs to be resized based on load factor
 func (h *DynamicHashIndex[V]) checkResize() {
+	// Use read lock to safely read size and maxLoad
+	h.resizeMu.RLock()
 	currentLoad := float64(h.entryCount.Load()) / float64(h.size)
+	maxLoad := h.maxLoad
+	h.resizeMu.RUnlock()
 
-	if currentLoad > h.maxLoad {
+	if currentLoad > maxLoad {
 		h.resize()
 	}
 }
 
 // resize creates a new larger hash index and migrates data
 func (h *DynamicHashIndex[V]) resize() {
+	// Use write lock to prevent concurrent resizes
+	h.resizeMu.Lock()
+	defer h.resizeMu.Unlock()
+
+	// Double-check load factor after acquiring lock
+	currentLoad := float64(h.entryCount.Load()) / float64(h.size)
+	if currentLoad <= h.maxLoad {
+		return // Another goroutine already resized
+	}
+
 	// Calculate new size
 	currentSize := h.entryCount.Load()
 	newSize := calculateOptimalBuckets(int(currentSize))

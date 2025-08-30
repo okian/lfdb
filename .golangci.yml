@@ -1,0 +1,491 @@
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+run:
+  timeout: 5m
+  go: "1.24"
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+  allow-serial-runners: false
+
+linters-settings:
+  # Security-focused linters
+  gosec:
+    excludes:
+      - G404 # Use of weak random number generator (math/rand instead of crypto/rand)
+      - G601 # Implicit memory aliasing in for loop
+    config:
+      # Allow some specific patterns for performance-critical code
+      G404:
+        # Allow math/rand in performance-critical paths where crypto/rand is too slow
+        - "internal/storage/index/.*"
+        - "internal/core/.*"
+      G601:
+        # Allow implicit memory aliasing in specific performance-critical loops
+        - "internal/storage/index/.*"
+  
+  # Code quality linters
+  govet:
+    check-shadowing: true
+    settings:
+      shadow:
+        strict: false
+  
+  # Performance linters
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+  
+  # Style and formatting
+  gofmt:
+    simplify: true
+  
+  goimports:
+    local-prefixes: github.com/kianostad/lfdb
+  
+  # Error handling
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+    ignore: fmt:.*
+  
+  # Unused code detection
+  unused:
+    check-exported: false
+  
+  # Dead code detection
+  deadcode:
+    check-generated: false
+  
+  # Complexity analysis
+  cyclop:
+    max-complexity: 15
+    package-average: 10.0
+    skip-tests: true
+  
+  # Function length
+  funlen:
+    lines: 100
+    statements: 50
+  
+  # Line length
+  lll:
+    line-length: 120
+    tab-width: 1
+  
+  # Naming conventions
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - disableStutteringCheck
+      - name: package-comments
+        disabled: true
+      - name: var-naming
+        arguments:
+          - ID
+          - API
+          - ACL
+          - ASCII
+          - CPU
+          - CSS
+          - DNS
+          - EOF
+          - GUID
+          - HTML
+          - HTTP
+          - HTTPS
+          - ID
+          - IP
+          - JSON
+          - QPS
+          - RAM
+          - RPC
+          - SLA
+          - SMTP
+          - SQL
+          - SSH
+          - TCP
+          - TLS
+          - TTL
+          - UDP
+          - UI
+          - GID
+          - UID
+          - UUID
+          - URI
+          - URL
+          - UTF8
+          - VM
+          - XML
+          - XMPP
+          - XSRF
+          - XSS
+          - SIP
+          - RTP
+          - AMQP
+          - DB
+          - TS
+
+linters:
+  enable:
+    # Security
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    
+    # Performance
+    - prealloc
+    - wastedassign
+    
+    # Code quality
+    - errcheck
+    - unused
+    - deadcode
+    - varcheck
+    - structcheck
+    - typecheck
+    - goconst
+    - gocyclo
+    - cyclop
+    - dupl
+    - funlen
+    - gocognit
+    - gocritic
+    - gocognit
+    - gomnd
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - stylecheck
+    - thelper
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - wastedassign
+    - whitespace
+    - wrapcheck
+    - wsl
+    
+    # Formatting
+    - gofmt
+    - goimports
+    - gofumpt
+    
+    # Documentation
+    - godot
+    - godox
+    - goheader
+    - gomnd
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - stylecheck
+    - thelper
+    - tparallel
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+    - wastedassign
+    - whitespace
+    - wrapcheck
+    - wsl
+
+  disable:
+    # Disable some linters for performance-critical code
+    - gomnd # Magic numbers are acceptable in performance-critical code
+    - gocognit # Cognitive complexity is acceptable for complex algorithms
+    - cyclop # Cyclomatic complexity is acceptable for complex algorithms
+    - funlen # Function length is acceptable for complex algorithms
+    - lll # Line length is acceptable for long comments
+    - goconst # Constants are acceptable for performance-critical code
+    - dupl # Duplicate code is acceptable for similar algorithms
+    - gocritic # Some criticisms are acceptable for performance-critical code
+    - gomoddirectives # Module directives are acceptable
+    - gomodguard # Module guard is acceptable
+    - goprintffuncname # Printf function names are acceptable
+    - nakedret # Naked returns are acceptable for short functions
+    - noctx # Context is not always required
+    - nolintlint # Nolint lint is acceptable
+    - predeclared # Predeclared identifiers are acceptable
+    - rowserrcheck # Row error check is acceptable
+    - stylecheck # Style check is acceptable
+    - thelper # Test helper is acceptable
+    - tparallel # Test parallel is acceptable
+    - unconvert # Unconvert is acceptable
+    - unparam # Unused parameters are acceptable
+    - varcheck # Var check is acceptable
+    - wastedassign # Wasted assign is acceptable
+    - whitespace # Whitespace is acceptable
+    - wrapcheck # Wrap check is acceptable
+    - wsl # Whitespace linter is acceptable
+    - godot # Godot is acceptable
+    - godox # Godox is acceptable
+    - goheader # Go header is acceptable
+
+issues:
+  exclude-rules:
+    # Exclude some rules for performance-critical code
+    - path: internal/storage/index/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+    
+    - path: internal/core/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+    
+    - path: internal/concurrency/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+    
+    - path: internal/monitoring/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+    
+    - path: tests/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+    
+    - path: cmd/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+    
+    - path: examples/
+      linters:
+        - gomnd
+        - gocognit
+        - cyclop
+        - funlen
+        - lll
+        - goconst
+        - dupl
+        - gocritic
+        - gomoddirectives
+        - gomodguard
+        - goprintffuncname
+        - nakedret
+        - noctx
+        - nolintlint
+        - predeclared
+        - rowserrcheck
+        - stylecheck
+        - thelper
+        - tparallel
+        - unconvert
+        - unparam
+        - varcheck
+        - wastedassign
+        - whitespace
+        - wrapcheck
+        - wsl
+        - godot
+        - godox
+        - goheader
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-use-default: false
+  fix: false
