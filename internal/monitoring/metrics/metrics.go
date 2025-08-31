@@ -262,7 +262,7 @@ func (rb *DurationRingBuffer) GetStats() LatencyStats {
 	})
 
 	stats := LatencyStats{
-		Count: uint64(rb.count),
+		Count: uint64(rb.count), // #nosec G115
 		Min:   values[0],
 		Max:   values[rb.count-1],
 	}

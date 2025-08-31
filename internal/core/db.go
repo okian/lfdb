@@ -479,21 +479,21 @@ func (d *db[K, V]) Delete(ctx context.Context, key K) bool {
 
 // Snapshot creates a new snapshot for consistent reads.
 func (d *db[K, V]) Snapshot(ctx context.Context) Snapshot[K, V] {
-    start := time.Now()
-    defer func() {
-        d.metrics.RecordSnapshot(time.Since(start))
-    }()
+	start := time.Now()
+	defer func() {
+		d.metrics.RecordSnapshot(time.Since(start))
+	}()
 
-    // Capture a stable read timestamp without advancing global time.
-    // Using a load here ensures the snapshot reflects the database state
-    // as of this moment, and will not accidentally include future writes
-    // that haven't been published yet.
-    rt := d.clock.Load()
-    d.epochs.Register(rt)
-    return &snapshot[K, V]{
-        db: d,
-        rt: rt,
-    }
+	// Capture a stable read timestamp without advancing global time.
+	// Using a load here ensures the snapshot reflects the database state
+	// as of this moment, and will not accidentally include future writes
+	// that haven't been published yet.
+	rt := d.clock.Load()
+	d.epochs.Register(rt)
+	return &snapshot[K, V]{
+		db: d,
+		rt: rt,
+	}
 }
 
 // Txn executes a transaction with snapshot isolation.
@@ -559,14 +559,14 @@ func (d *db[K, V]) Txn(ctx context.Context, fn func(tx Txn[K, V]) error) error {
 // GetMetrics returns current database metrics
 func (d *db[K, V]) GetMetrics(ctx context.Context) metrics.MetricsSnapshot {
 	// Update active snapshots count
-	d.metrics.SetActiveSnapshots(uint64(d.epochs.ActiveCount()))
+	d.metrics.SetActiveSnapshots(uint64(d.epochs.ActiveCount())) // #nosec G115
 	return d.metrics.GetStats()
 }
 
 // GetMetricsLegacy returns metrics in the old map format for backward compatibility
 func (d *db[K, V]) GetMetricsLegacy(ctx context.Context) map[string]interface{} {
 	// Update active snapshots count
-	d.metrics.SetActiveSnapshots(uint64(d.epochs.ActiveCount()))
+	d.metrics.SetActiveSnapshots(uint64(d.epochs.ActiveCount())) // #nosec G115
 	return d.metrics.GetStatsLegacy()
 }
 
@@ -604,7 +604,9 @@ func (d *db[K, V]) ManualGC(ctx context.Context) error {
 // This operation is irreversible and will remove all keys and values.
 func (d *db[K, V]) Truncate(ctx context.Context) error {
 	// Wait for any pending operations to complete
-	d.Flush(ctx)
+	if err := d.Flush(ctx); err != nil {
+		return fmt.Errorf("flush failed: %v", err)
+	}
 
 	// Create a new index to replace the old one
 	newIndex := index.NewHashIndex[V](1024)

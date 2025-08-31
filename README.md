@@ -1,20 +1,25 @@
-# LFDB - Lock-Free Database
+# LFDB — Lock-Free In-Memory Database for Go
 
-A high-performance, lock-free in-memory database written in Go with MVCC (Multi-Version Concurrency Control) support.
+High-performance, lock-free in-memory database with MVCC (multi-version concurrency control), snapshots, TTL, batches, atomic ops, and metrics — written in Go.
 
-## Features
+## Highlights
 
-- **Lock-free algorithms** for maximum concurrency
-- **MVCC** for consistent reads without blocking writes
-- **Epoch-based garbage collection** for safe memory reclamation
-- **SIMD optimizations** for bulk operations
-- **TTL support** for automatic expiration
-- **Atomic operations** for numeric types
-- **Batch operations** for improved performance
-- **Snapshot isolation** for consistent reads
-- **Comprehensive metrics** and monitoring
+- Lock-free algorithms with snapshot isolation (MVCC)
+- Epoch-based garbage collection and safe memory reclamation
+- TTL and absolute expiry support
+- Atomic ops for numeric types (add/inc/dec/mul/div)
+- Batch puts/gets and snapshot iterators
+- Metrics and observability hooks
 
-## Quick Start
+## Install
+
+```bash
+go get github.com/kianostad/lfdb
+```
+
+- Requires Go 1.24+ (matches `go.mod` and CI matrix)
+
+## Quick Start (String API, recommended)
 
 ```go
 package main
@@ -28,298 +33,103 @@ import (
 
 func main() {
     ctx := context.Background()
-    
-    // Create a new database with string keys (recommended)
+
     db := lfdb.NewStringDB[string]()
     defer db.Close(ctx)
-    
-    // Basic operations
+
+    // CRUD
     db.Put(ctx, "hello", "world")
-    value, exists := db.Get(ctx, "hello")
-    fmt.Printf("Value: %s, exists: %t\n", value, exists)
-    
-    // Transactions
-    err := db.Txn(ctx, func(tx lfdb.StringKeyTxn[string]) error {
-        tx.Put(ctx, "key1", "value1")
-        tx.Put(ctx, "key2", "value2")
+    if v, ok := db.Get(ctx, "hello"); ok { fmt.Println(v) }
+
+    // Txn
+    _ = db.Txn(ctx, func(tx lfdb.StringKeyTxn[string]) error {
+        tx.Put(ctx, "k1", "v1")
+        tx.Put(ctx, "k2", "v2")
         return nil
     })
-    
-    // Snapshots
-    snapshot := db.Snapshot(ctx)
-    defer snapshot.Close(ctx)
-    value, exists = snapshot.Get(ctx, "key1")
-    
-    // TTL operations
-    db.PutWithTTL(ctx, "temp", "value", 5*time.Minute)
-    ttl, exists := db.GetTTL(ctx, "temp")
-    
-    // Atomic operations (for numeric types)
-    numDB := lfdb.NewStringDB[int]()
-    newVal, _ := numDB.Add(ctx, "counter", 5)
-    newVal, _ = numDB.Increment(ctx, "counter")
-}
 
-// Alternative: Use []byte keys for maximum performance
-func performanceExample() {
-    ctx := context.Background()
-    
-    // Create database with []byte keys (maximum performance)
-    db := lfdb.New[[]byte, string]()
-    defer db.Close(ctx)
-    
-    db.Put(ctx, []byte("hello"), "world")
-    value, exists := db.Get(ctx, []byte("hello"))
+    // Snapshot
+    snap := db.Snapshot(ctx)
+    defer snap.Close(ctx)
+    snap.Iterate(ctx, func(k, v string) bool { fmt.Println(k, v); return true })
+
+    // TTL
+    db.PutWithTTL(ctx, "temp", "value", 5*time.Second)
+    if ttl, ok := db.GetTTL(ctx, "temp"); ok { fmt.Println("TTL:", ttl) }
+
+    // Atomic
+    cdb := lfdb.NewStringDB[int]()
+    cdb.Add(ctx, "counter", 5)
+    cdb.Increment(ctx, "counter")
 }
 ```
 
-## Installation
+## Alternative API (raw []byte keys)
 
-```bash
-go get github.com/kianostad/lfdb
-```
-
-## API Overview
-
-### Basic Operations
+For maximum performance and zero-copy key handling:
 
 ```go
-// Create database with string keys (recommended for most use cases)
-db := lfdb.NewStringDB[string]()
-
-// CRUD operations
-db.Put(ctx, "key", "value")
-value, exists := db.Get(ctx, "key")
-deleted := db.Delete(ctx, "key")
-
-// Cleanup
-db.Close(ctx)
-
-// Alternative: Use []byte keys for maximum performance
-byteDB := lfdb.New[[]byte, string]()
-byteDB.Put(ctx, []byte("key"), "value")
-value, exists = byteDB.Get(ctx, []byte("key"))
+db := lfdb.New[[]byte, string]()
+defer db.Close(context.Background())
+db.Put(ctx, []byte("hello"), "world")
 ```
 
-### Transactions
+## Core Operations
 
-```go
-// String-based transactions (recommended)
-err := db.Txn(ctx, func(tx lfdb.StringKeyTxn[string]) error {
-    tx.Put(ctx, "key1", "value1")
-    tx.Put(ctx, "key2", "value2")
-    return nil
-})
+- CRUD: `Put`, `Get`, `Delete`
+- Transactions: `Txn(func(tx ...){ ... })` with `tx.Put`, `tx.Get`, `tx.Delete` and atomic/TTL helpers
+- Snapshots: `Snapshot(ctx)` with `Get` and `Iterate`
+- TTL: `PutWithTTL`, `PutWithExpiry`, `GetTTL`, `ExtendTTL`, `RemoveTTL`
+- Atomic (numeric): `Add`, `Increment`, `Decrement`, `Multiply`, `Divide`
+- Batch: `NewStringBatch` / `NewBatch`, `ExecuteBatch`, `BatchPut`, `BatchGet`, `BatchPutWithTTL`
 
-// Alternative: []byte-based transactions
-err = byteDB.Txn(ctx, func(tx lfdb.Txn[[]byte, string]) error {
-    tx.Put(ctx, []byte("key1"), "value1")
-    tx.Put(ctx, []byte("key2"), "value2")
-    return nil
-})
-```
+See runnable examples in `examples/string_api/main.go` and `examples/basic_usage.go`.
 
-### Snapshots
+## Metrics
 
-```go
-// String-based snapshots (recommended)
-snapshot := db.Snapshot(ctx)
-defer snapshot.Close(ctx)
+- Access a snapshot of counters and gauges via `db.GetMetrics(ctx)`.
+- A demo showing how to record and inspect metrics lives in `examples/enhanced_metrics_demo.go`.
 
-value, exists := snapshot.Get(ctx, "key")
-snapshot.Iterate(ctx, func(key string, val string) bool {
-    // Process each key-value pair
-    return true // Return false to stop iteration
-})
+## CLI Tools
 
-// Alternative: []byte-based snapshots
-byteSnapshot := byteDB.Snapshot(ctx)
-defer byteSnapshot.Close(ctx)
+- REPL: `go run cmd/repl/main.go`
+- Benchmarks: `go run cmd/bench/main.go` or `make bench`
 
-value, exists = byteSnapshot.Get(ctx, []byte("key"))
-byteSnapshot.Iterate(ctx, func(key []byte, val string) bool {
-    return true
-})
-```
+## Makefile Commands
 
-### TTL Operations
+Use `make help` for a full list. Common tasks:
 
-```go
-// String-based TTL operations (recommended)
-db.PutWithTTL(ctx, "temp", "value", 5*time.Minute)
-ttl, exists := db.GetTTL(ctx, "temp")
-db.ExtendTTL(ctx, "temp", 1*time.Minute)
-db.RemoveTTL(ctx, "temp")
+- `make test`: Run tests with race detector
+- `make bench`: Run benchmarks
+- `make format`: Format with `goimports`
+- `make lint`: Run `golangci-lint`
+- `make lint-all`: Lint + security (`gosec`) + vuln check
+- `make build`: Build all binaries in `cmd/`
 
-// Alternative: []byte-based TTL operations
-byteDB.PutWithTTL(ctx, []byte("temp"), "value", 5*time.Minute)
-ttl, exists = byteDB.GetTTL(ctx, []byte("temp"))
-```
+Advanced test suites:
 
-### Atomic Operations
+- `make fuzz` | `make property` | `make linearizability` | `make race-detection` | `make gc`
+- `make test-all` to run everything; `make all-tests` to include benches
 
-```go
-// String-based atomic operations (recommended)
-numDB := lfdb.NewStringDB[int]()
+## Documentation
 
-newVal, _ := numDB.Add(ctx, "counter", 5)
-newVal, _ = numDB.Increment(ctx, "counter")
-newVal, _ = numDB.Decrement(ctx, "counter")
-newVal, _ = numDB.Multiply(ctx, "counter", 2)
-newVal, _ = numDB.Divide(ctx, "counter", 2)
-
-// Alternative: []byte-based atomic operations
-byteNumDB := lfdb.New[[]byte, int]()
-newVal, _ = byteNumDB.Add(ctx, []byte("counter"), 5)
-```
-
-### Batch Operations
-
-```go
-// String-based batch operations (recommended)
-keys := []string{"key1", "key2"}
-values := []string{"value1", "value2"}
-err := db.BatchPut(ctx, keys, values)
-
-results := db.BatchGet(ctx, keys)
-for i, result := range results {
-    fmt.Printf("Key: %s, Value: %s, Exists: %t\n", 
-        keys[i], result.Value, result.Found)
-}
-
-err = db.BatchDelete(ctx, keys)
-
-// Alternative: []byte-based batch operations
-byteKeys := [][]byte{[]byte("key1"), []byte("key2")}
-err = byteDB.BatchPut(ctx, byteKeys, values)
-```
-
-### Convenience Types
-
-```go
-// String-based convenience types (recommended)
-stringDB := lfdb.NewStringDB[string]()
-intDB := lfdb.NewStringDB[int]()
-int64DB := lfdb.NewStringDB[int64]()
-float64DB := lfdb.NewStringDB[float64]()
-bytesDB := lfdb.NewStringDB[[]byte]()
-
-// Alternative: Legacy []byte-based convenience types
-legacyStringDB := lfdb.NewStringDBLegacy()
-legacyIntDB := lfdb.NewIntDB()
-legacyInt64DB := lfdb.NewInt64DB()
-legacyFloat64DB := lfdb.NewFloat64DB()
-legacyBytesDB := lfdb.NewBytesDB()
-```
-
-## Performance Characteristics
-
-- **High-throughput**: Optimized for concurrent read/write operations
-- **Linear scalability**: Performance scales with CPU cores
-- **Low latency**: Lock-free algorithms minimize contention
-- **Memory efficient**: Epoch-based garbage collection with minimal overhead
-- **SIMD optimized**: Bulk operations use SIMD instructions where available
-
-## Thread Safety
-
-All database operations are thread-safe and can be called concurrently from multiple goroutines. The database uses lock-free algorithms to ensure maximum concurrency without blocking.
-
-## Memory Management
-
-The database uses epoch-based garbage collection to safely reclaim memory from deleted entries and expired TTL entries. Manual garbage collection can be triggered if needed:
-
-```go
-err := db.ManualGC(ctx)
-```
+- Architecture: `docs/ARCHITECTURE.md`
+- Contributing: `docs/CONTRIBUTING.md`
+- Makefile overview: `docs/MAKEFILE.md`
 
 ## Best Practices
 
-1. **Always close databases**: Use `defer db.Close(ctx)` to ensure proper cleanup
-2. **Use transactions**: Group related operations in transactions for consistency
-3. **Prefer batch operations**: Use batch operations for bulk data handling
-4. **Monitor memory**: Call `ManualGC()` periodically in long-running applications
-5. **Use snapshots**: Use snapshots for read-heavy workloads that need consistency
-6. **Keep keys small**: Prefer keys under 1KB for optimal performance
-7. **Use TTL**: Use TTL for temporary data to prevent memory leaks
-8. **Handle context**: Use appropriate context timeouts and cancellation
+- Always `defer db.Close(ctx)` to release resources
+- Use transactions for related writes; snapshots for consistent reads
+- Prefer batch ops for large workloads
+- Call `ManualGC(ctx)` periodically in long-running processes
+- Keep keys reasonably small; use TTL for temporary data
 
-## Examples
+## Testing and CI
 
-See the `examples/` directory for comprehensive usage examples:
-
-```bash
-go run examples/basic_usage.go
-```
-
-## Command Line Tools
-
-The project includes command-line tools for testing and benchmarking:
-
-```bash
-# REPL for interactive database usage
-make repl
-
-# Run benchmarks
-make bench
-
-# Run throughput tests
-./scripts/run_throughput_tests.sh
-```
-
-## Development
-
-### Linting and Code Quality
-
-The project uses comprehensive linting and security scanning tools:
-
-```bash
-# Install development tools
-make tools
-
-# Run all linting and security checks
-make lint-all
-
-# Run individual checks
-make lint          # golangci-lint
-make security      # gosec security scanner
-make vulncheck     # vulnerability check
-
-# Run the comprehensive linting script
-./scripts/lint.sh
-
-# Set up pre-commit hooks
-pre-commit install
-```
-
-### Available Linting Tools
-
-- **golangci-lint**: Comprehensive Go linter with 50+ linters
-- **gosec**: Security-focused static analysis
-- **govulncheck**: Vulnerability scanning for dependencies
-- **pre-commit**: Git hooks for automated checks
-
-### Code Quality Standards
-
-The project follows strict code quality standards:
-- All code must pass golangci-lint with zero issues
-- Security vulnerabilities are treated as build failures
-- Code formatting is enforced via gofmt
-- Import organization via goimports
-- Comprehensive test coverage required
-
-## Testing
-
-```bash
-# Run all tests
-make test
-
-# Run benchmarks
-make bench
-
-# Run specific test categories
-go test ./tests/...
-```
+- Local: `make test` or `go test ./...`
+- CI: GitHub Actions with multi-arch, race, coverage, fuzz, property, and security scanning
 
 ## License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+MIT — see `LICENSE`.

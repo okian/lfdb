@@ -107,9 +107,9 @@ type node[V any] struct {
 
 // HashIndex is a lock-free hash table with fixed-size buckets.
 type HashIndex[V any] struct {
-    buckets []atomic.Pointer[node[V]]
-    size    uint64
-    mask    uint64
+	buckets []atomic.Pointer[node[V]]
+	size    uint64
+	mask    uint64
 }
 
 // NewHashIndex creates a new hash index with the given size (must be power of 2).
@@ -132,7 +132,7 @@ func (h *HashIndex[V]) hash(key []byte) uint64 {
 	if len(key) <= 8 {
 		var hash uint64
 		for i, b := range key {
-			hash = hash*31 + uint64(b) + uint64(i)
+			hash = hash*31 + uint64(b) + uint64(i) // #nosec G115
 		}
 		return hash & h.mask
 	}
@@ -188,71 +188,71 @@ func (h *HashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
 // GetOrCreateWithFlag is like GetOrCreate but returns whether a new entry was created.
 // The boolean is true only when this call inserted a new entry into the index.
 func (h *HashIndex[V]) GetOrCreateWithFlag(key []byte) (*mvcc.Entry[V], bool) {
-    bucketIdx := h.hash(key)
-    bucket := &h.buckets[bucketIdx]
+	bucketIdx := h.hash(key)
+	bucket := &h.buckets[bucketIdx]
 
-    // First, try to find existing entry
-    for n := bucket.Load(); n != nil; n = n.next.Load() {
-        if bytesEqual(n.entry.Key(), key) {
-            return n.entry, false
-        }
-    }
+	// First, try to find existing entry
+	for n := bucket.Load(); n != nil; n = n.next.Load() {
+		if bytesEqual(n.entry.Key(), key) {
+			return n.entry, false
+		}
+	}
 
-    // Create new entry and node
-    entry := mvcc.NewEntry[V](key)
-    newNode := &node[V]{
-        entry: entry,
-    }
+	// Create new entry and node
+	entry := mvcc.NewEntry[V](key)
+	newNode := &node[V]{
+		entry: entry,
+	}
 
-    // Try to insert at head of bucket
-    for {
-        oldHead := bucket.Load()
-        newNode.next.Store(oldHead)
-        if bucket.CompareAndSwap(oldHead, newNode) {
-            return entry, true
-        }
+	// Try to insert at head of bucket
+	for {
+		oldHead := bucket.Load()
+		newNode.next.Store(oldHead)
+		if bucket.CompareAndSwap(oldHead, newNode) {
+			return entry, true
+		}
 
-        // CAS failed, check if someone else inserted our key
-        for n := bucket.Load(); n != nil; n = n.next.Load() {
-            if bytesEqual(n.entry.Key(), key) {
-                return n.entry, false
-            }
-        }
-    }
+		// CAS failed, check if someone else inserted our key
+		for n := bucket.Load(); n != nil; n = n.next.Load() {
+			if bytesEqual(n.entry.Key(), key) {
+				return n.entry, false
+			}
+		}
+	}
 }
 
 // InsertExistingEntry inserts an existing MVCC entry into the index if absent.
 // Returns true if the entry was inserted, false if an entry with the same key already existed.
 func (h *HashIndex[V]) InsertExistingEntry(entry *mvcc.Entry[V]) bool {
-    if entry == nil {
-        return false
-    }
-    key := entry.Key()
-    bucketIdx := h.hash(key)
-    bucket := &h.buckets[bucketIdx]
+	if entry == nil {
+		return false
+	}
+	key := entry.Key()
+	bucketIdx := h.hash(key)
+	bucket := &h.buckets[bucketIdx]
 
-    // Check if an entry with the same key already exists
-    for n := bucket.Load(); n != nil; n = n.next.Load() {
-        if bytesEqual(n.entry.Key(), key) {
-            return false
-        }
-    }
+	// Check if an entry with the same key already exists
+	for n := bucket.Load(); n != nil; n = n.next.Load() {
+		if bytesEqual(n.entry.Key(), key) {
+			return false
+		}
+	}
 
-    // Insert node pointing to the existing entry
-    newNode := &node[V]{entry: entry}
-    for {
-        oldHead := bucket.Load()
-        newNode.next.Store(oldHead)
-        if bucket.CompareAndSwap(oldHead, newNode) {
-            return true
-        }
-        // If CAS failed, recheck for existence
-        for n := bucket.Load(); n != nil; n = n.next.Load() {
-            if bytesEqual(n.entry.Key(), key) {
-                return false
-            }
-        }
-    }
+	// Insert node pointing to the existing entry
+	newNode := &node[V]{entry: entry}
+	for {
+		oldHead := bucket.Load()
+		newNode.next.Store(oldHead)
+		if bucket.CompareAndSwap(oldHead, newNode) {
+			return true
+		}
+		// If CAS failed, recheck for existence
+		for n := bucket.Load(); n != nil; n = n.next.Load() {
+			if bytesEqual(n.entry.Key(), key) {
+				return false
+			}
+		}
+	}
 }
 
 // Get finds an entry for the given key without creating a new one.

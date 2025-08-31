@@ -8,6 +8,10 @@ on:
   pull_request:
     branches: [ main, master, develop ]
 
+# Minimal global permissions; job-specific permissions added where needed.
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
@@ -119,6 +123,9 @@ jobs:
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -140,6 +147,8 @@ jobs:
 
       - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v3
+        # Skip on PRs from forks where GITHUB_TOKEN cannot write security events
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         with:
           sarif_file: results.sarif
 

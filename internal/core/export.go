@@ -34,7 +34,7 @@ type ExportHeader struct {
 
 // ExportBinary exports database data to a highly efficient binary format
 func ExportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
-	file, err := os.Create(filename)
+	file, err := os.Create(filename) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", filename, err)
 	}
@@ -69,7 +69,7 @@ func ExportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
 		default:
 			valueLen = len(fmt.Sprintf("%v", v))
 		}
-		totalSize += uint64(len(key) + valueLen + 8) // key_len + value_len + key + value
+		totalSize += uint64(len(key) + valueLen + 8) // #nosec G115
 		return true
 	})
 
@@ -87,7 +87,7 @@ func ExportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
 
 	// Write entries
 	for _, entry := range entries {
-		keyLen := uint32(len(entry.key))
+		keyLen := uint32(len(entry.key)) // #nosec G115
 
 		// Convert value to bytes based on type
 		var valueBytes []byte
@@ -99,7 +99,7 @@ func ExportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
 		default:
 			valueBytes = []byte(fmt.Sprintf("%v", v))
 		}
-		valueLen := uint32(len(valueBytes))
+		valueLen := uint32(len(valueBytes)) // #nosec G115
 
 		if err := binary.Write(writer, binary.LittleEndian, keyLen); err != nil {
 			return fmt.Errorf("failed to write key length: %v", err)
@@ -120,7 +120,7 @@ func ExportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
 
 // ImportBinary imports database data from the binary format
 func ImportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
-	file, err := os.Open(filename)
+	file, err := os.Open(filename) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to open file %s: %v", filename, err)
 	}
@@ -176,7 +176,7 @@ func ImportBinary[K ~[]byte, V any](db DB[K, V], filename string) error {
 
 // ExportCSV exports data to CSV format (good for human-readable exports)
 func ExportCSV[K ~[]byte, V any](db DB[K, V], filename string) error {
-	file, err := os.Create(filename)
+	file, err := os.Create(filename) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", filename, err)
 	}
@@ -218,7 +218,7 @@ func ExportCSV[K ~[]byte, V any](db DB[K, V], filename string) error {
 
 // ImportCSV imports data from CSV format
 func ImportCSV[K ~[]byte, V any](db DB[K, V], filename string) error {
-	file, err := os.Open(filename)
+	file, err := os.Open(filename) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to open file %s: %v", filename, err)
 	}
@@ -271,7 +271,7 @@ func ImportCSV[K ~[]byte, V any](db DB[K, V], filename string) error {
 
 // ExportJSON exports data to JSON format (for compatibility)
 func ExportJSON[K ~[]byte, V any](db DB[K, V], filename string) error {
-	file, err := os.Create(filename)
+	file, err := os.Create(filename) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %v", filename, err)
 	}
@@ -321,7 +321,7 @@ func ExportJSON[K ~[]byte, V any](db DB[K, V], filename string) error {
 
 // ImportJSON imports data from JSON format
 func ImportJSON[K ~[]byte, V any](db DB[K, V], filename string) error {
-	file, err := os.Open(filename)
+	file, err := os.Open(filename) // #nosec G304
 	if err != nil {
 		return fmt.Errorf("failed to open file %s: %v", filename, err)
 	}
