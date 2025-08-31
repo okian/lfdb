@@ -295,37 +295,35 @@ func (e *Entry[V]) GetTTL(rt uint64) (time.Duration, bool) {
 // ExtendTTL extends the TTL of the current version by the given duration.
 // Returns true if the TTL was successfully extended.
 func (e *Entry[V]) ExtendTTL(ct uint64, extension time.Duration) bool {
-	current := e.head.Load()
-	if current == nil {
-		return false
-	}
+    current := e.head.Load()
+    if current == nil {
+        return false
+    }
 
-	b := atomic.LoadUint64(&current.begin)
-	eend := atomic.LoadUint64(&current.end)
-	if b <= ct && ct < eend && !current.tomb {
-		if current.expiresAt != nil {
-			var newExpiry time.Time
-			if extension >= 0 {
-				// For positive extensions, extend from current time
-				newExpiry = time.Now().Add(extension)
-			} else {
-				// For negative extensions, extend from current expiry time
-				// This prevents immediate expiration while still allowing TTL reduction
-				newExpiry = current.expiresAt.Add(extension)
-				// Ensure we don't set expiry to a past time
-				if newExpiry.Before(time.Now()) {
-					newExpiry = time.Now().Add(1 * time.Millisecond)
-				}
-			}
-			// Create a new version with extended TTL to maintain MVCC semantics
-			new := e.pool.Get()
-			new.val = current.val
-			new.expiresAt = &newExpiry
-			e.publish(new, ct)
-			return true
-		}
-	}
-	return false
+    b := atomic.LoadUint64(&current.begin)
+    eend := atomic.LoadUint64(&current.end)
+    if b <= ct && ct < eend && !current.tomb {
+        if current.expiresAt != nil {
+            now := time.Now()
+            remaining := time.Until(*current.expiresAt)
+            if remaining < 0 {
+                remaining = 0
+            }
+            // Extend relative to remaining TTL for consistency with transactional semantics
+            target := remaining + extension
+            if target < 0 {
+                target = 1 * time.Millisecond // clamp to minimal positive duration
+            }
+            newExpiry := now.Add(target)
+            // Create a new version with extended TTL to maintain MVCC semantics
+            new := e.pool.Get()
+            new.val = current.val
+            new.expiresAt = &newExpiry
+            e.publish(new, ct)
+            return true
+        }
+    }
+    return false
 }
 
 // RemoveTTL removes the TTL from the current version.
