@@ -168,40 +168,80 @@ func NewEntry[V any](key []byte) *Entry[V] {
 // Get retrieves the value at the given read timestamp.
 // This operation is wait-free - it never blocks on writers.
 func (e *Entry[V]) Get(rt uint64) (V, bool) {
-	for v := e.head.Load(); v != nil; v = v.next.Load() {
-		b := atomic.LoadUint64(&v.begin)
-		eend := atomic.LoadUint64(&v.end)
-		if b <= rt && rt < eend {
-			if v.tomb {
-				var z V
-				return z, false
-			}
-			// Check TTL expiration
-			if v.expiresAt != nil && time.Now().After(*v.expiresAt) {
-				var z V
-				return z, false
-			}
-			return v.val, true
-		}
-	}
-	var z V
-	return z, false
+    // Try multiple times to tolerate extremely rare publication windows
+    // during concurrent updates. Typically returns on first pass.
+    for attempt := 0; attempt < 16; attempt++ {
+        for v := e.head.Load(); v != nil; v = v.next.Load() {
+            b := atomic.LoadUint64(&v.begin)
+            eend := atomic.LoadUint64(&v.end)
+
+            // Skip versions that are not yet fully published or have invalid bounds
+            if b == ^uint64(0) {
+                // Begin not set yet; treat as not visible
+                continue
+            }
+            if eend == 0 { // should never be 0 for a valid version
+                continue
+            }
+
+            if b <= rt && rt < eend {
+                if v.tomb {
+                    var z V
+                    return z, false
+                }
+                // Expire at or before now to match GetTTL semantics
+                if v.expiresAt != nil && !time.Now().Before(*v.expiresAt) {
+                    var z V
+                    return z, false
+                }
+                return v.val, true
+            }
+        }
+        // Retry in case we observed a transient publication state
+    }
+    var z V
+    return z, false
 }
 
 // publish atomically publishes a new version to the head of the chain.
 // This operation is lock-free using CAS.
 func (e *Entry[V]) publish(new *Version[V], ct uint64) {
-	for {
-		old := e.head.Load()
-		new.next.Store(old)
-		if e.head.CompareAndSwap(old, new) {
-			atomic.StoreUint64(&new.begin, ct) // make visible
-			if old != nil {
-				atomic.StoreUint64(&old.end, ct) // close old version
-			}
-			return
-		}
-	}
+    // Initialize visibility window before publishing.
+    // New versions are open-ended until superseded.
+    atomic.StoreUint64(&new.begin, ct)
+    atomic.StoreUint64(&new.end, ^uint64(0))
+
+    for {
+        old := e.head.Load()
+        new.next.Store(old)
+        // Publish new head. Readers that observe the new head will see a
+        // fully initialized visibility window [begin=ct, end=max].
+        if e.head.CompareAndSwap(old, new) {
+            if old != nil {
+                // Close the old version at ct. Readers with rt < ct will see
+                // the old version; readers with rt >= ct will see the new one.
+                atomic.StoreUint64(&old.end, ct)
+            }
+            return
+        }
+    }
+}
+
+// publishExact attempts to publish `new` only if the current head is `old`.
+// On success, it closes `old` at ct and returns true. On CAS failure, returns false.
+func (e *Entry[V]) publishExact(old, new *Version[V], ct uint64) bool {
+    // Initialize visibility window before publishing.
+    atomic.StoreUint64(&new.begin, ct)
+    atomic.StoreUint64(&new.end, ^uint64(0))
+    new.next.Store(old)
+
+    if e.head.CompareAndSwap(old, new) {
+        if old != nil {
+            atomic.StoreUint64(&old.end, ct)
+        }
+        return true
+    }
+    return false
 }
 
 // Put creates and publishes a new version with the given value.
@@ -237,19 +277,24 @@ func (e *Entry[V]) PutWithExpiry(val V, ct uint64, expiresAt time.Time) {
 
 // Delete creates and publishes a tombstone version.
 func (e *Entry[V]) Delete(ct uint64) bool {
-	// Check if already deleted
-	if v := e.head.Load(); v != nil {
-		b := atomic.LoadUint64(&v.begin)
-		eend := atomic.LoadUint64(&v.end)
-		if b <= ct && ct < eend && v.tomb {
-			return false // already deleted
-		}
-	}
+    for {
+        v := e.head.Load()
+        if v != nil {
+            b := atomic.LoadUint64(&v.begin)
+            eend := atomic.LoadUint64(&v.end)
+            if b <= ct && ct < eend && v.tomb {
+                return false // already deleted at ct
+            }
+        }
 
-	new := e.pool.Get()
-	new.tomb = true
-	e.publish(new, ct)
-	return true
+        new := e.pool.Get()
+        new.tomb = true
+        if e.publishExact(v, new, ct) {
+            return true
+        }
+        // CAS failed due to concurrent writer; recycle and retry
+        e.pool.Put(new)
+    }
 }
 
 // IsDeleted checks if the entry is deleted at the given timestamp.
@@ -295,54 +340,63 @@ func (e *Entry[V]) GetTTL(rt uint64) (time.Duration, bool) {
 // ExtendTTL extends the TTL of the current version by the given duration.
 // Returns true if the TTL was successfully extended.
 func (e *Entry[V]) ExtendTTL(ct uint64, extension time.Duration) bool {
-    current := e.head.Load()
-    if current == nil {
-        return false
-    }
+    for {
+        current := e.head.Load()
+        if current == nil {
+            return false
+        }
 
-    b := atomic.LoadUint64(&current.begin)
-    eend := atomic.LoadUint64(&current.end)
-    if b <= ct && ct < eend && !current.tomb {
-        if current.expiresAt != nil {
-            now := time.Now()
-            remaining := time.Until(*current.expiresAt)
-            if remaining < 0 {
-                remaining = 0
-            }
-            // Extend relative to remaining TTL for consistency with transactional semantics
-            target := remaining + extension
-            if target < 0 {
-                target = 1 * time.Millisecond // clamp to minimal positive duration
-            }
-            newExpiry := now.Add(target)
-            // Create a new version with extended TTL to maintain MVCC semantics
-            new := e.pool.Get()
-            new.val = current.val
-            new.expiresAt = &newExpiry
-            e.publish(new, ct)
+        b := atomic.LoadUint64(&current.begin)
+        eend := atomic.LoadUint64(&current.end)
+        if !(b <= ct && ct < eend) || current.tomb || current.expiresAt == nil {
+            return false
+        }
+
+        // Set absolute TTL to now + extension (not additive with remaining)
+        // to match expected semantics in tests.
+        if extension <= 0 {
+            // Non-positive extensions are treated as immediate minimal TTL
+            extension = 1 * time.Millisecond
+        }
+        newExpiry := time.Now().Add(extension)
+
+        // Create a new version with updated TTL to maintain MVCC semantics
+        new := e.pool.Get()
+        new.val = current.val
+        new.expiresAt = &newExpiry
+
+        if e.publishExact(current, new, ct) {
             return true
         }
+        // CAS failed; recycle and retry
+        e.pool.Put(new)
     }
-    return false
 }
 
 // RemoveTTL removes the TTL from the current version.
 // Returns true if the TTL was successfully removed.
 func (e *Entry[V]) RemoveTTL(ct uint64) bool {
-	current := e.head.Load()
-	if current == nil {
-		return false
-	}
+    for {
+        current := e.head.Load()
+        if current == nil {
+            return false
+        }
 
-	b := atomic.LoadUint64(&current.begin)
-	eend := atomic.LoadUint64(&current.end)
-	if b <= ct && ct < eend && !current.tomb {
-		// Create a new version without TTL to maintain MVCC semantics
-		new := e.pool.Get()
-		new.val = current.val
-		new.expiresAt = nil // no TTL
-		e.publish(new, ct)
-		return true
-	}
-	return false
+        b := atomic.LoadUint64(&current.begin)
+        eend := atomic.LoadUint64(&current.end)
+        if !(b <= ct && ct < eend) || current.tomb || current.expiresAt == nil {
+            return false
+        }
+
+        // Create a new version without TTL to maintain MVCC semantics
+        new := e.pool.Get()
+        new.val = current.val
+        new.expiresAt = nil // no TTL
+
+        if e.publishExact(current, new, ct) {
+            return true
+        }
+        // CAS failed; recycle and retry
+        e.pool.Put(new)
+    }
 }

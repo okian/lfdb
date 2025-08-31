@@ -1,6 +1,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-//go:build amd64 && !purego && goamd64.v4
+//go:build amd64 && !purego && amd64.v4
 
 // This file implements bytes-equality using AVX2 for Go on amd64.
 // It compares two byte slices a and b and returns true if all bytes match.
@@ -87,9 +87,15 @@ avx2_tail:
 scalar_tail:
         TESTQ CX, CX            // Any bytes left to compare?
         JE    equal             // If no remainder, slices are equal
-        MOVQ  CX, R8            // Copy remaining count into R8 (CMPSB will use CX)
-        REP; CMPSB              // Compare bytes one-by-one: SI vs DI, CX times
-        JNE   not_equal         // If any mismatch, flags set -> not equal
+tail_loop:
+        MOVB  (SI), AL          // Load next byte from a
+        MOVB  (DI), DL          // Load next byte from b
+        CMPB  AL, DL            // Compare bytes
+        JNE   not_equal         // Any mismatch -> not equal
+        INCQ  SI                // Advance pointers
+        INCQ  DI
+        DECQ  CX                // Decrement remaining count
+        JNZ   tail_loop         // Loop until no remainder
         JMP   equal             // All remaining bytes matched
 
 equal:

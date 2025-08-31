@@ -479,17 +479,21 @@ func (d *db[K, V]) Delete(ctx context.Context, key K) bool {
 
 // Snapshot creates a new snapshot for consistent reads.
 func (d *db[K, V]) Snapshot(ctx context.Context) Snapshot[K, V] {
-	start := time.Now()
-	defer func() {
-		d.metrics.RecordSnapshot(time.Since(start))
-	}()
+    start := time.Now()
+    defer func() {
+        d.metrics.RecordSnapshot(time.Since(start))
+    }()
 
-	rt := d.clock.Load()
-	d.epochs.Register(rt)
-	return &snapshot[K, V]{
-		db: d,
-		rt: rt,
-	}
+    // Capture a stable read timestamp without advancing global time.
+    // Using a load here ensures the snapshot reflects the database state
+    // as of this moment, and will not accidentally include future writes
+    // that haven't been published yet.
+    rt := d.clock.Load()
+    d.epochs.Register(rt)
+    return &snapshot[K, V]{
+        db: d,
+        rt: rt,
+    }
 }
 
 // Txn executes a transaction with snapshot isolation.

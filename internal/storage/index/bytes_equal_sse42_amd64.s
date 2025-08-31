@@ -1,6 +1,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-//go:build amd64 && !purego && (goamd64.v3 || goamd64.v4)
+//go:build amd64 && !purego && (amd64.v3 || amd64.v4)
 
 // This function compares two byte slices using SSE4.2-capable XMM instructions
 // (though the sequence below uses operations available since SSE2 and is valid
@@ -61,9 +61,15 @@ loop:
 tail:
         TESTQ CX, CX            // Any leftover bytes?
         JE    equal             // If none, we are equal
-        MOVQ  CX, R8            // Copy remainder to R8 (CMPSB consumes CX)
-        REP; CMPSB              // Compare remaining bytes one-by-one
-        JNE   not_equal         // Mismatch -> false
+tail_loop:
+        MOVB  (SI), AL          // Load next byte from a
+        MOVB  (DI), DL          // Load next byte from b
+        CMPB  AL, DL            // Compare bytes
+        JNE   not_equal         // Any mismatch -> false
+        INCQ  SI                // Advance pointers
+        INCQ  DI
+        DECQ  CX                // Decrement remaining count
+        JNZ   tail_loop         // Continue until CX == 0
         JMP   equal             // All remaining bytes matched
 
 equal:

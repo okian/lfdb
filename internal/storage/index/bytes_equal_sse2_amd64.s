@@ -57,9 +57,15 @@ loop:
 tail:
         TESTQ CX, CX            // Leftover bytes?
         JE    equal             // If none, equal
-        MOVQ  CX, R8            // Copy remainder (CMPSB uses CX internally)
-        REP; CMPSB              // Compare bytes SI vs DI, CX times
-        JNE   not_equal         // Any mismatch -> false
+tail_loop:
+        MOVB  (SI), AL          // Load next byte from a
+        MOVB  (DI), DL          // Load next byte from b
+        CMPB  AL, DL            // Compare bytes
+        JNE   not_equal         // Mismatch -> false
+        INCQ  SI                // Advance pointers
+        INCQ  DI
+        DECQ  CX                // Decrement remaining count
+        JNZ   tail_loop         // Continue until CX == 0
         JMP   equal             // All matched
 
 equal:
