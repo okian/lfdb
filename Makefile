@@ -58,19 +58,6 @@ test-all: test race fuzz property linearizability race-detection gc
 # Run all tests (comprehensive)
 all-tests: test race fuzz property linearizability race-detection gc bench
 
-# Run throughput tests
-throughput:
-	./scripts/run_throughput_tests.sh basic
-
-throughput-optimized:
-	go run ./cmd/throughput_optimized -duration=30s -goroutines=8 -batch-size=100
-
-throughput-all:
-	./scripts/run_throughput_tests.sh all
-
-throughput-realtime:
-	./scripts/run_throughput_tests.sh realtime
-
 # Run all basic tests and benchmarks
 run-all: test race bench
 
@@ -88,18 +75,14 @@ help:
 	@echo "  test-all      - Run all comprehensive tests"
 	@echo "  all-tests     - Run all tests including benchmarks"
 	@echo "  run-all       - Run basic tests and benchmarks"
-	@echo "  throughput    - Run basic throughput test"
-	@echo "  throughput-optimized - Run optimized throughput test"
-	@echo "  throughput-all - Run all throughput tests"
-        @echo "  throughput-realtime - Run real-time throughput test"
-        @echo "  lint          - Run golangci-lint"
-        @echo "  security      - Run gosec security scanner"
-        @echo "  vulncheck     - Run vulnerability check"
-        @echo "  lint-all      - Run all linting and security checks"
-        @echo "  vet           - Run go vet static analysis"
-        @echo "  check         - Run lint and tests"
-        @echo "  build         - Build all binaries"
-        @echo "  clean         - Clean build artifacts"
+	@echo "  lint          - Run golangci-lint"
+	@echo "  security      - Run gosec security scanner"
+	@echo "  vulncheck     - Run vulnerability check"
+	@echo "  lint-all      - Run all linting and security checks"
+	@echo "  vet           - Run go vet static analysis"
+	@echo "  check         - Run lint and tests"
+	@echo "  build         - Build all binaries"
+	@echo "  clean         - Clean build artifacts"
 
 # Run linter
 lint:
@@ -132,8 +115,6 @@ check: lint-all test race
 # Build all binaries after vetting
 build: vet
 	go build ./cmd/...
-	go build -o bin/throughput ./cmd/throughput
-	go build -o bin/throughput-optimized ./cmd/throughput_optimized
 
 # Install tools
 tools:
