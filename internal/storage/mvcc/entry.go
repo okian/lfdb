@@ -115,6 +115,26 @@ import (
 	"time"
 )
 
+// cloneBytes returns a copy of b to prevent external mutation from affecting
+// internal state. A nil slice returns nil.
+func cloneBytes(b []byte) []byte {
+	if b == nil {
+		return nil
+	}
+	dup := make([]byte, len(b))
+	copy(dup, b)
+	return dup
+}
+
+// cloneValue returns a deep copy of v when v is a byte slice. Other value
+// types are returned unmodified to avoid unnecessary allocations.
+func cloneValue[V any](v V) V {
+	if b, ok := any(v).([]byte); ok {
+		return any(cloneBytes(b)).(V)
+	}
+	return v
+}
+
 // Version represents an immutable version of a value in the MVCC chain.
 // A version is visible to readers if begin <= readTimestamp < end.
 type Version[V any] struct {
@@ -135,9 +155,12 @@ type Entry[V any] struct {
 }
 
 // NewEntry creates a new entry for the given key.
+//
+// The key bytes are cloned so external mutations cannot corrupt the index or
+// violate snapshot isolation.
 func NewEntry[V any](key []byte) *Entry[V] {
 	return &Entry[V]{
-		key:  key,
+		key:  cloneBytes(key),
 		pool: NewVersionPool[V](),
 	}
 }
@@ -182,25 +205,32 @@ func (e *Entry[V]) publish(new *Version[V], ct uint64) {
 }
 
 // Put creates and publishes a new version with the given value.
+//
+// Byte-slice values are cloned to ensure snapshots observe immutable data.
 func (e *Entry[V]) Put(val V, ct uint64) {
 	new := e.pool.Get()
-	new.val = val
+	new.val = cloneValue(val)
 	e.publish(new, ct)
 }
 
 // PutWithTTL creates and publishes a new version with the given value and TTL.
+//
+// Byte-slice values are cloned to keep snapshot reads isolated from caller
+// mutations.
 func (e *Entry[V]) PutWithTTL(val V, ct uint64, ttl time.Duration) {
 	expiresAt := time.Now().Add(ttl)
 	new := e.pool.Get()
-	new.val = val
+	new.val = cloneValue(val)
 	new.expiresAt = &expiresAt
 	e.publish(new, ct)
 }
 
-// PutWithExpiry creates and publishes a new version with the given value and absolute expiry time.
+// PutWithExpiry creates and publishes a new version with the given value and
+// absolute expiry time. Byte-slice values are cloned to preserve snapshot
+// isolation.
 func (e *Entry[V]) PutWithExpiry(val V, ct uint64, expiresAt time.Time) {
 	new := e.pool.Get()
-	new.val = val
+	new.val = cloneValue(val)
 	new.expiresAt = &expiresAt
 	e.publish(new, ct)
 }
