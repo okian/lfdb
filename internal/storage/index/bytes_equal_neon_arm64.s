@@ -32,10 +32,10 @@ loop:
         VLD1  (R0), [V0.B16]
         VLD1  (R2), [V1.B16]
         VEOR  V1.B16, V0.B16, V2.B16
-        VMOV  V2.D[0], R5
-        VMOV  V2.D[1], R6
-        ORR   R5, R5, R6
-        CBNZ  R5, not_equal
+        VMOV  V2.D[0], R5                // move lower 64 bits to R5
+        VMOV  V2.D[1], R6                // move upper 64 bits to R6
+        ORR   R6, R5, R6                 // combine halves into R6
+        CBNZ  R6, not_equal              // branch if any byte differs
         ADD   $neonChunkSize, R0, R0
         ADD   $neonChunkSize, R2, R2
         SUBS  $1, R4, R4

@@ -14,6 +14,9 @@ import (
 	"github.com/kianostad/lfdb/internal/storage/mvcc"
 )
 
+// wordSize defines the number of bytes processed in each word comparison.
+const wordSize = int(unsafe.Sizeof(uint64(0)))
+
 // CPU feature flags for optimization
 var (
 	hasAVX2  = cpu.X86.HasAVX2
@@ -88,30 +91,26 @@ func bytesEqualNEON(a, b []byte) bool {
 
 // bytesEqualScalar is the optimized scalar implementation
 func bytesEqualScalar(a, b []byte) bool {
-	// Early exit for different lengths
-	if len(a) != len(b) {
+	lenA := len(a)
+	if lenA != len(b) {
 		return false
 	}
-	if len(a) == 0 {
+	if lenA == 0 {
 		return true
 	}
 
-	// Use word-sized comparisons when possible
-	if len(a) >= 8 {
-		// Compare 8 bytes at a time
-		for i := 0; i <= len(a)-8; i += 8 {
-			// Convert to uint64 for word comparison
+	if lenA >= wordSize {
+		for i := 0; i+wordSize <= lenA; i += wordSize {
 			va := *(*uint64)(unsafe.Pointer(&a[i]))
 			vb := *(*uint64)(unsafe.Pointer(&b[i]))
 			if va != vb {
 				return false
 			}
 		}
-		// Handle remaining bytes
-		remaining := len(a) % 8
+		remaining := lenA % wordSize
 		if remaining > 0 {
-			start := len(a) - remaining
-			for i := start; i < len(a); i++ {
+			start := lenA - remaining
+			for i := start; i < lenA; i++ {
 				if a[i] != b[i] {
 					return false
 				}
@@ -120,8 +119,7 @@ func bytesEqualScalar(a, b []byte) bool {
 		return true
 	}
 
-	// For short slices, use byte-by-byte comparison
-	for i := range a {
+	for i := 0; i < lenA; i++ {
 		if a[i] != b[i] {
 			return false
 		}
