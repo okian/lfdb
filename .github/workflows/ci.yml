@@ -54,14 +54,15 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Run tests
-        run: go test -race -v -p=1 ./...
+      - name: Run vet and tests
+        run: |
+          set -euo pipefail
+          make test
 
       - name: Run tests with coverage
         run: |
-          go test -race -v -coverprofile=coverage.out -covermode=atomic -p=1 ./...
-          go tool cover -func=coverage.out
-          go tool cover -html=coverage.out -o coverage.html
+          set -euo pipefail
+          make test-coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -136,9 +137,8 @@ jobs:
 
       - name: Build binaries
         run: |
-          go build -o bin/lfdb ./lfdb.go
-          go build -o bin/bench ./cmd/bench
-          go build -o bin/repl ./cmd/repl
+          set -euo pipefail
+          make build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

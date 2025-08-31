@@ -383,6 +383,8 @@ func TestGetStats(t *testing.T) {
 	}
 }
 
+// TestConcurrentAccess verifies that all operation counters account for
+// concurrent updates without dropping events.
 func TestConcurrentAccess(t *testing.T) {
 	metrics := NewMetrics()
 	defer metrics.Close()
@@ -406,20 +408,22 @@ func TestConcurrentAccess(t *testing.T) {
 
 	wg.Wait()
 
-	// Give some time for background processing
-	time.Sleep(10 * time.Millisecond)
-
-	stats := metrics.GetStats()
-
 	expectedCount := uint64(numGoroutines * operationsPerGoroutine)
-	if stats.Operations.Get != expectedCount {
-		t.Errorf("Expected get operations to be %d, got %d", expectedCount, stats.Operations.Get)
-	}
-	if stats.Operations.Put != expectedCount {
-		t.Errorf("Expected put operations to be %d, got %d", expectedCount, stats.Operations.Put)
-	}
-	if stats.Operations.Delete != expectedCount {
-		t.Errorf("Expected delete operations to be %d, got %d", expectedCount, stats.Operations.Delete)
+
+	// Poll until background processing catches up or timeout triggers.
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for {
+		stats := metrics.GetStats()
+		if stats.Operations.Get == expectedCount &&
+			stats.Operations.Put == expectedCount &&
+			stats.Operations.Delete == expectedCount {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected %d operations, got get=%d put=%d delete=%d",
+				expectedCount, stats.Operations.Get, stats.Operations.Put, stats.Operations.Delete)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 

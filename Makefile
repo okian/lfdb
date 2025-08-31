@@ -1,12 +1,16 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-.PHONY: test bench race lint clean
+.PHONY: test vet bench race lint clean build
 
 # Default target
 all: test
 
-# Run tests
-test:
+# Run go vet static analysis
+vet:
+	go vet ./...
+
+# Run static analysis and tests
+test: vet
 	go test -race -v -p=1 ./...
 
 # Run benchmarks
@@ -87,14 +91,15 @@ help:
 	@echo "  throughput    - Run basic throughput test"
 	@echo "  throughput-optimized - Run optimized throughput test"
 	@echo "  throughput-all - Run all throughput tests"
-	@echo "  throughput-realtime - Run real-time throughput test"
-	@echo "  lint          - Run golangci-lint"
-	@echo "  security      - Run gosec security scanner"
-	@echo "  vulncheck     - Run vulnerability check"
-	@echo "  lint-all      - Run all linting and security checks"
-	@echo "  check         - Run lint and tests"
-	@echo "  build         - Build all binaries"
-	@echo "  clean         - Clean build artifacts"
+        @echo "  throughput-realtime - Run real-time throughput test"
+        @echo "  lint          - Run golangci-lint"
+        @echo "  security      - Run gosec security scanner"
+        @echo "  vulncheck     - Run vulnerability check"
+        @echo "  lint-all      - Run all linting and security checks"
+        @echo "  vet           - Run go vet static analysis"
+        @echo "  check         - Run lint and tests"
+        @echo "  build         - Build all binaries"
+        @echo "  clean         - Clean build artifacts"
 
 # Run linter
 lint:
@@ -124,8 +129,8 @@ deps:
 # Run all checks
 check: lint-all test race
 
-# Build all binaries
-build:
+# Build all binaries after vetting
+build: vet
 	go build ./cmd/...
 	go build -o bin/throughput ./cmd/throughput
 	go build -o bin/throughput-optimized ./cmd/throughput_optimized
