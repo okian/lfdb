@@ -42,7 +42,7 @@ loop:
         BNE   loop
 
 tail:
-        CMP   R1, $8
+        CMP   $8, R1
         BLO   byte_tail
         VLD1  (R0), [V0.B8]
         VLD1  (R2), [V1.B8]
@@ -57,9 +57,9 @@ byte_tail:
         CBZ  R1, equal
         MOVD R1, R4
 byte_loop:
-        LDRB W5, (R0)
-        LDRB W6, (R2)
-        CMP  W5, W6
+        MOVBU (R0), R5
+        MOVBU (R2), R6
+        CMP   R5, R6
         BNE  not_equal
         ADD  $1, R0, R0
         ADD  $1, R2, R2

@@ -61,6 +61,27 @@ func bytesEqualOptimized(a, b []byte) bool {
 // Assembly implementation is in bytes_equal_neon_arm64.s.
 func bytesEqualNEON(a, b []byte) bool
 
+// bytesEqualAVX2 is a stub on arm64 and falls back to the scalar path.
+//
+//nolint:unused
+func bytesEqualAVX2(a, b []byte) bool {
+	return bytesEqualScalar(a, b)
+}
+
+// bytesEqualSSE42 is a stub on arm64 and falls back to the scalar path.
+//
+//nolint:unused
+func bytesEqualSSE42(a, b []byte) bool {
+	return bytesEqualScalar(a, b)
+}
+
+// bytesEqualSSE2 is a stub on arm64 and falls back to the scalar path.
+//
+//nolint:unused
+func bytesEqualSSE2(a, b []byte) bool {
+	return bytesEqualScalar(a, b)
+}
+
 // bytesEqualScalar is the optimized scalar implementation shared with other architectures.
 func bytesEqualScalar(a, b []byte) bool {
 	lenA := len(a)
@@ -197,4 +218,22 @@ func (h *OptimizedHashIndex[V]) Delete(key []byte) bool {
 		prev = n
 	}
 	return false
+}
+
+// Size returns the number of buckets in the index.
+func (h *OptimizedHashIndex[V]) Size() uint64 {
+	return h.size
+}
+
+// BucketCount returns the number of entries in a specific bucket (for debugging).
+func (h *OptimizedHashIndex[V]) BucketCount(bucketIdx uint64) int {
+	if bucketIdx >= h.size {
+		return 0
+	}
+
+	count := 0
+	for n := h.buckets[bucketIdx].Load(); n != nil; n = n.next.Load() {
+		count++
+	}
+	return count
 }
