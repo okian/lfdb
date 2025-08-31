@@ -58,40 +58,40 @@ func calculateOptimalBuckets(dataSize int) uint64 {
 // GetOrCreate finds an entry for the given key, or creates a new one if it doesn't exist.
 // This operation is lock-free and may trigger resizing.
 func (h *DynamicHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
-	// Check if we need to resize
-	h.checkResize()
+    // Check if we need to resize
+    h.checkResize()
 
-	// Use read lock for accessing the hash index
-	h.resizeMu.RLock()
-	existingEntry := h.HashIndex.Get(key)
-	h.resizeMu.RUnlock()
+    // Use read lock for accessing the hash index
+    h.resizeMu.RLock()
+    existingEntry := h.HashIndex.Get(key)
+    h.resizeMu.RUnlock()
 
-	if existingEntry != nil {
-		return existingEntry
-	}
+    if existingEntry != nil {
+        return existingEntry
+    }
 
-	// Use read lock for creating new entry
-	h.resizeMu.RLock()
-	entry := h.HashIndex.GetOrCreate(key)
-	h.resizeMu.RUnlock()
+    // Use read lock for creating new entry
+    h.resizeMu.RLock()
+    entry, created := h.HashIndex.GetOrCreateWithFlag(key)
+    h.resizeMu.RUnlock()
 
-	// Increment entry count only for new entries
-	if entry != nil {
-		h.entryCount.Add(1)
-	}
+    // Increment entry count only for new entries
+    if created {
+        h.entryCount.Add(1)
+    }
 
-	return entry
+    return entry
 }
 
 // checkResize checks if the index needs to be resized based on load factor
 func (h *DynamicHashIndex[V]) checkResize() {
 	// Use read lock to safely read size and maxLoad
 	h.resizeMu.RLock()
-	currentLoad := float64(h.entryCount.Load()) / float64(h.size)
-	maxLoad := h.maxLoad
+	currentEntries := float64(h.entryCount.Load())
+	maxEntries := h.maxLoad // max allowed entries before resize
 	h.resizeMu.RUnlock()
 
-	if currentLoad > maxLoad {
+	if currentEntries > maxEntries {
 		h.resize()
 	}
 }
@@ -103,8 +103,8 @@ func (h *DynamicHashIndex[V]) resize() {
 	defer h.resizeMu.Unlock()
 
 	// Double-check load factor after acquiring lock
-	currentLoad := float64(h.entryCount.Load()) / float64(h.size)
-	if currentLoad <= h.maxLoad {
+	currentEntries := float64(h.entryCount.Load())
+	if currentEntries <= h.maxLoad {
 		return // Another goroutine already resized
 	}
 
@@ -128,15 +128,15 @@ func (h *DynamicHashIndex[V]) migrateEntries(newIndex *HashIndex[V]) {
 	// This is a simplified migration - in a production system,
 	// you'd want to do this incrementally to avoid blocking
 
-	for i := range h.buckets {
-		bucket := &h.buckets[i]
-		for node := bucket.Load(); node != nil; node = node.next.Load() {
-			if node.entry != nil {
-				// Re-insert into new index
-				newIndex.GetOrCreate(node.entry.Key())
-			}
-		}
-	}
+    for i := range h.buckets {
+        bucket := &h.buckets[i]
+        for node := bucket.Load(); node != nil; node = node.next.Load() {
+            if node.entry != nil {
+                // Insert existing entry pointer into the new index to preserve data
+                newIndex.InsertExistingEntry(node.entry)
+            }
+        }
+    }
 }
 
 // GetCurrentLoad returns the current load factor

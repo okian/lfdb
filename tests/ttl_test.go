@@ -4,9 +4,10 @@ package tests
 
 import (
 	"context"
-	core "github.com/kianostad/lfdb/internal/core"
 	"testing"
 	"time"
+
+	core "github.com/kianostad/lfdb/internal/core"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

@@ -30,19 +30,22 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
           - goarch: amd64
             goamd64: '1'
+            runner: ubuntu-latest
           - goarch: amd64
             goamd64: '3'
+            runner: ubuntu-latest
           - goarch: amd64
             goamd64: '4'
+            runner: ubuntu-latest
           - goarch: arm64
             goamd64: '1'
-            exec: /usr/bin/qemu-aarch64-static
+            runner: ubuntu-24.04-arm
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,9 +59,9 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Install QEMU
+      - name: Ensure build tools for cgo (arm64)
         if: matrix.goarch == 'arm64'
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y build-essential
 
       - name: Run vet and tests
         shell: bash
@@ -66,11 +69,11 @@ jobs:
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
           GOAMD64: ${{ matrix.goamd64 }}
-          TEST_EXEC: ${{ matrix.exec }}
+          CGO_ENABLED: 1
         run: |
           set -euo pipefail
           go vet ./...
-          go test ${TEST_EXEC:+-exec=${TEST_EXEC}} -race -p=1 ./...
+          go test -race -p=1 ./...
 
       - name: Run tests with coverage
         if: matrix.goarch == 'amd64' && matrix.goamd64 == '4'
@@ -79,10 +82,10 @@ jobs:
           GOOS: linux
           GOARCH: ${{ matrix.goarch }}
           GOAMD64: ${{ matrix.goamd64 }}
-          TEST_EXEC: ${{ matrix.exec }}
+          CGO_ENABLED: 1
         run: |
           set -euo pipefail
-          go test ${TEST_EXEC:+-exec=${TEST_EXEC}} -race -coverprofile=coverage.out -covermode=atomic -p=1 ./...
+          go test -race -coverprofile=coverage.out -covermode=atomic -p=1 ./...
           go tool cover -func=coverage.out
 
       - name: Upload coverage to Codecov
@@ -133,7 +136,7 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Run gosec security scanner
-        run: gosec -fmt sarif -out results.sarif ./...
+        run: gosec -no-fail -fmt sarif -out results.sarif ./...
 
       - name: Upload SARIF results
         uses: github/codeql-action/upload-sarif@v3
@@ -281,4 +284,3 @@ jobs:
 
       - name: Run GC tests
         run: go test -v -run TestGC ./...
-

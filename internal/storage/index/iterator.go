@@ -163,28 +163,18 @@ func (h *HashIndex[V]) NewIterator(rt uint64) *Iterator[V] {
 
 // Next advances the iterator to the next entry
 func (it *Iterator[V]) Next() bool {
-	// If we have a current node, move to its next
-	if it.node != nil {
-		it.node = it.node.next.Load()
-		if it.node != nil {
-			return true
-		}
-	}
+    // Advance within current bucket if possible
+    if it.node != nil {
+        it.node = it.node.next.Load()
+    }
 
-	// Find next bucket with entries
-	for it.bucketIdx < it.index.size {
-		it.bucketIdx++
-		if it.bucketIdx >= it.index.size {
-			return false
-		}
+    // If current node is nil, move to the next non-empty bucket
+    for it.node == nil && it.bucketIdx < it.index.size {
+        it.node = it.index.buckets[it.bucketIdx].Load()
+        it.bucketIdx++ // advance bucket index after probing this bucket
+    }
 
-		it.node = it.index.buckets[it.bucketIdx].Load()
-		if it.node != nil {
-			return true
-		}
-	}
-
-	return false
+    return it.node != nil
 }
 
 // Entry returns the current entry

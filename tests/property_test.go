@@ -4,8 +4,9 @@ package tests
 
 import (
 	"context"
-	core "github.com/kianostad/lfdb/internal/core"
 	"testing"
+
+	core "github.com/kianostad/lfdb/internal/core"
 
 	"pgregory.net/rapid"
 )

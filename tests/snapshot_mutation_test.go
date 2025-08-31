@@ -6,8 +6,9 @@ package tests
 import (
 	"bytes"
 	"context"
-	core "github.com/kianostad/lfdb/internal/core"
 	"testing"
+
+	core "github.com/kianostad/lfdb/internal/core"
 )
 
 // Constants used in snapshot mutation tests.

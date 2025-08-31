@@ -4,10 +4,11 @@ package tests
 
 import (
 	"context"
-	core "github.com/kianostad/lfdb/internal/core"
 	"sync"
 	"testing"
 	"time"
+
+	core "github.com/kianostad/lfdb/internal/core"
 )
 
 // TestLinearizabilitySingleKeySimple tests linearizability for single key operations

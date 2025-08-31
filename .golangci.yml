@@ -27,7 +27,6 @@ linters-settings:
   
   # Code quality linters
   govet:
-    check-shadowing: true
     settings:
       shadow:
         strict: false
@@ -49,7 +48,7 @@ linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
-    ignore: fmt:.*
+    exclude-functions: fmt:.*
   
   # Unused code detection
   unused:

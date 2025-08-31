@@ -3,10 +3,11 @@
 package tests
 
 import (
-	"context"
-	core "github.com/kianostad/lfdb/internal/core"
 	"bytes"
+	"context"
 	"testing"
+
+	core "github.com/kianostad/lfdb/internal/core"
 )
 
 // FuzzBasicOperations fuzzes basic database operations
@@ -162,40 +163,47 @@ func FuzzSnapshotOperations(f *testing.F) {
 	// Add seed corpus
 	f.Add([]byte("snapshot-key"), []byte("snapshot-value"))
 
-	f.Fuzz(func(t *testing.T, key, value []byte) {
-		ctx := context.Background()
-		database := core.New[[]byte, []byte]()
-		defer database.Close(ctx)
+    f.Fuzz(func(t *testing.T, key, value []byte) {
+        ctx := context.Background()
+        database := core.New[[]byte, []byte]()
+        defer database.Close(ctx)
 
-		// Put value
-		database.Put(ctx, key, value)
+        // Make defensive copies of fuzz inputs to avoid aliasing effects.
+        // The fuzzer may provide slices that share the same backing array.
+        // If we then append to value, it could accidentally mutate key.
+        // Copying ensures database lookups use stable keys.
+        k := append([]byte(nil), key...)
+        v := append([]byte(nil), value...)
 
-		// Create snapshot
-		snapshot := database.Snapshot(ctx)
-		defer snapshot.Close(ctx)
+        // Put value
+        database.Put(ctx, k, v)
 
-		// Verify snapshot sees the value
-		retrieved, exists := snapshot.Get(ctx, key)
-		if !exists {
-			t.Fatalf("Snapshot should see value for key %v", key)
-		}
-		if !bytes.Equal(retrieved, value) {
-			t.Fatalf("Snapshot should see correct value for key %v", key)
-		}
+        // Create snapshot
+        snapshot := database.Snapshot(ctx)
+        defer snapshot.Close(ctx)
 
-		// Modify value after snapshot
-		newValue := append(value, []byte("-modified")...)
-		database.Put(ctx, key, newValue)
+        // Verify snapshot sees the value
+        retrieved, exists := snapshot.Get(ctx, k)
+        if !exists {
+            t.Fatalf("Snapshot should see value for key %v", k)
+        }
+        if !bytes.Equal(retrieved, v) {
+            t.Fatalf("Snapshot should see correct value for key %v", k)
+        }
 
-		// Snapshot should still see old value
-		retrieved, exists = snapshot.Get(ctx, key)
-		if !exists {
-			t.Fatalf("Snapshot should still see old value for key %v", key)
-		}
-		if !bytes.Equal(retrieved, value) {
-			t.Fatalf("Snapshot should still see old value for key %v", key)
-		}
-	})
+        // Modify value after snapshot
+        newValue := append(v, []byte("-modified")...)
+        database.Put(ctx, k, newValue)
+
+        // Snapshot should still see old value
+        retrieved, exists = snapshot.Get(ctx, k)
+        if !exists {
+            t.Fatalf("Snapshot should still see old value for key %v: exists=%v got=%v want=%v", k, exists, retrieved, v)
+        }
+        if !bytes.Equal(retrieved, v) {
+            t.Fatalf("Snapshot should still see old value for key %v: got=%v want=%v", k, retrieved, v)
+        }
+    })
 }
 
 // FuzzEdgeCases fuzzes edge cases

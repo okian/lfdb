@@ -3,9 +3,10 @@
 package tests
 
 import (
-	core "github.com/kianostad/lfdb/internal/core"
 	"sync"
 	"testing"
+
+	core "github.com/kianostad/lfdb/internal/core"
 )
 
 func TestOptimizedDBBasicOperations(t *testing.T) {

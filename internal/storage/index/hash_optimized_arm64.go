@@ -237,3 +237,23 @@ func (h *OptimizedHashIndex[V]) BucketCount(bucketIdx uint64) int {
 	}
 	return count
 }
+
+// ForEach iterates over all entries in the index, calling fn for each entry.
+// The iteration stops if fn returns false.
+func (h *OptimizedHashIndex[V]) ForEach(fn func(key []byte, entry *mvcc.Entry[V]) bool) {
+	for i := uint64(0); i < h.size; i++ {
+		bucket := h.buckets[i].Load()
+		if bucket == nil {
+			continue
+		}
+
+		// Iterate over all nodes in the bucket
+		current := bucket
+		for current != nil {
+			if !fn(current.entry.Key(), current.entry) {
+				return // Stop iteration if callback returns false
+			}
+			current = current.next.Load()
+		}
+	}
+}
