@@ -4,8 +4,11 @@ package index
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
+
+	"golang.org/x/sys/cpu"
 )
 
 func TestOptimizedHashIndexBasicOperations(t *testing.T) {
@@ -198,6 +201,49 @@ func TestOptimizedHashIndexEdgeCases(t *testing.T) {
 	emptyEntry2 := index.Get([]byte{})
 	if emptyEntry2 != emptyEntry {
 		t.Error("Expected same entry for empty key")
+	}
+}
+
+func TestBytesEqualSIMDVariants(t *testing.T) {
+	t.Parallel()
+
+	type variant struct {
+		name      string
+		fn        func([]byte, []byte) bool
+		supported bool
+	}
+
+	var variants []variant
+	switch runtime.GOARCH {
+	case "amd64":
+		variants = []variant{
+			{"AVX2", bytesEqualAVX2, cpu.X86.HasAVX2},
+			{"SSE42", bytesEqualSSE42, cpu.X86.HasSSE42},
+			{"SSE2", bytesEqualSSE2, cpu.X86.HasSSE2},
+		}
+	case "arm64":
+		variants = []variant{
+			{"NEON", bytesEqualNEON, cpu.ARM64.HasASIMD},
+		}
+	}
+
+	for _, v := range variants {
+		v := v
+		t.Run(v.name, func(t *testing.T) {
+			t.Parallel()
+			if !v.supported {
+				t.Skipf("%s not supported", v.name)
+			}
+			if !v.fn(nil, nil) {
+				t.Error("nil slices should be equal")
+			}
+			if !v.fn([]byte{}, []byte{}) {
+				t.Error("empty slices should be equal")
+			}
+			if v.fn([]byte{1}, []byte{2}) {
+				t.Error("different slices reported equal")
+			}
+		})
 	}
 }
 

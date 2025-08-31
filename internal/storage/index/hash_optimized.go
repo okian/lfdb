@@ -1,7 +1,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-//go:build !amd64
-// +build !amd64
+//go:build !(amd64 || arm64)
+// +build !amd64,!arm64
 
 package index
 
@@ -9,19 +9,7 @@ import (
 	"sync/atomic"
 	"unsafe"
 
-	"golang.org/x/sys/cpu"
-
 	"github.com/kianostad/lfdb/internal/storage/mvcc"
-)
-
-// CPU feature flags for optimization
-var (
-	hasAVX2 = cpu.X86.HasAVX2
-	// hasSSE42 and hasSSE2 are available but not currently used in non-amd64 builds
-	// hasSSE42 = cpu.X86.HasSSE42
-	// hasSSE2  = cpu.X86.HasSSE2
-	// hasSSSE3 is available but not currently used
-	// hasSSSE3 = cpu.X86.HasSSSE3
 )
 
 // OptimizedHashIndex is a lock-free hash table with SIMD optimizations
@@ -150,6 +138,14 @@ func bytesEqualSSE42(a, b []byte) bool {
 //
 //nolint:unused
 func bytesEqualSSE2(a, b []byte) bool {
+	return bytesEqualScalar(a, b)
+}
+
+// bytesEqualNEON uses ARM64 NEON instructions for 16-byte comparisons.
+// This is a stub for non-arm64 builds.
+//
+//nolint:unused
+func bytesEqualNEON(a, b []byte) bool {
 	return bytesEqualScalar(a, b)
 }
 

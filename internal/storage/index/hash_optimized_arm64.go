@@ -1,7 +1,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-//go:build amd64
-// +build amd64
+//go:build arm64
+// +build arm64
 
 package index
 
@@ -16,14 +16,11 @@ import (
 
 // CPU feature flags for optimization
 var (
-	hasAVX2  = cpu.X86.HasAVX2
-	hasSSE42 = cpu.X86.HasSSE42
-	hasSSE2  = cpu.X86.HasSSE2
-	// hasSSSE3 is available but not currently used
-	// hasSSSE3 = cpu.X86.HasSSSE3
+	hasNEON = cpu.ARM64.HasASIMD
 )
 
 // OptimizedHashIndex is a lock-free hash table with SIMD optimizations
+// identical to the amd64 variant but tailored for arm64.
 type OptimizedHashIndex[V any] struct {
 	buckets []atomic.Pointer[node[V]]
 	size    uint64
@@ -43,7 +40,7 @@ func NewOptimizedHashIndex[V any](size uint64) *OptimizedHashIndex[V] {
 	}
 }
 
-// bytesEqualOptimized selects the best available comparison method
+// bytesEqualOptimized selects the best available comparison method.
 func bytesEqualOptimized(a, b []byte) bool {
 	if len(a) != len(b) {
 		return false
@@ -51,63 +48,32 @@ func bytesEqualOptimized(a, b []byte) bool {
 	if len(a) == 0 {
 		return true
 	}
-
-	// Use SIMD for aligned data
-	if hasAVX2 && len(a) >= 32 {
-		return bytesEqualAVX2(a, b)
+	if hasNEON && len(a) >= 16 {
+		return bytesEqualNEON(a, b)
 	}
-	if hasSSE42 && len(a) >= 16 {
-		return bytesEqualSSE42(a, b)
-	}
-	if hasSSE2 && len(a) >= 16 {
-		return bytesEqualSSE2(a, b)
-	}
-
-	// Fallback to scalar implementation
 	return bytesEqualScalar(a, b)
 }
 
-// bytesEqualAVX2 uses AVX2 instructions for 32-byte aligned comparisons
-// Assembly implementation is in bytes_equal_avx2_amd64.s
-func bytesEqualAVX2(a, b []byte) bool
+// bytesEqualNEON uses ARM64 NEON instructions for 16-byte comparisons.
+// Assembly implementation is in bytes_equal_neon_arm64.s.
+func bytesEqualNEON(a, b []byte) bool
 
-// bytesEqualSSE42 uses SSE4.2 instructions for 16-byte aligned comparisons
-// Assembly implementation is in bytes_equal_sse42_amd64.s
-func bytesEqualSSE42(a, b []byte) bool
-
-// bytesEqualSSE2 uses SSE2 instructions for 16-byte aligned comparisons
-// Assembly implementation is in bytes_equal_sse2_amd64.s
-func bytesEqualSSE2(a, b []byte) bool
-
-// bytesEqualNEON is a stub on amd64 and falls back to the scalar path.
-//
-//nolint:unused
-func bytesEqualNEON(a, b []byte) bool {
-	return bytesEqualScalar(a, b)
-}
-
-// bytesEqualScalar is the optimized scalar implementation
+// bytesEqualScalar is the optimized scalar implementation shared with other architectures.
 func bytesEqualScalar(a, b []byte) bool {
-	// Early exit for different lengths
 	if len(a) != len(b) {
 		return false
 	}
 	if len(a) == 0 {
 		return true
 	}
-
-	// Use word-sized comparisons when possible
 	if len(a) >= 8 {
-		// Compare 8 bytes at a time
 		for i := 0; i <= len(a)-8; i += 8 {
-			// Convert to uint64 for word comparison
 			va := *(*uint64)(unsafe.Pointer(&a[i]))
 			vb := *(*uint64)(unsafe.Pointer(&b[i]))
 			if va != vb {
 				return false
 			}
 		}
-		// Handle remaining bytes
 		remaining := len(a) % 8
 		if remaining > 0 {
 			start := len(a) - remaining
@@ -119,8 +85,6 @@ func bytesEqualScalar(a, b []byte) bool {
 		}
 		return true
 	}
-
-	// For short slices, use byte-by-byte comparison
 	for i := range a {
 		if a[i] != b[i] {
 			return false
@@ -129,26 +93,56 @@ func bytesEqualScalar(a, b []byte) bool {
 	return true
 }
 
+// hashOptimized computes the hash of the key using optimized algorithms.
+func (h *OptimizedHashIndex[V]) hashOptimized(key []byte) uint64 {
+	if len(key) <= 8 {
+		return h.hashShort(key)
+	}
+	if hasNEON && len(key) >= 32 {
+		// Future NEON-optimized hash could be placed here.
+	}
+	return h.hashFNV1a(key)
+}
+
+// hashShort optimizes short key hashing.
+func (h *OptimizedHashIndex[V]) hashShort(key []byte) uint64 {
+	var hash uint64
+	for i, b := range key {
+		hash = hash*31 + uint64(b) + uint64(i)
+	}
+	return hash & h.mask
+}
+
+// hashFNV1a is the fallback FNV-1a hash implementation.
+func (h *OptimizedHashIndex[V]) hashFNV1a(key []byte) uint64 {
+	const fnvPrime uint64 = 1099511628211
+	const fnvOffsetBasis uint64 = 14695981039346656037
+
+	hash := fnvOffsetBasis
+	for _, b := range key {
+		hash ^= uint64(b)
+		hash *= fnvPrime
+	}
+	return hash & h.mask
+}
+
 // GetOrCreate finds an entry for the given key, or creates a new one if it doesn't exist.
 // This operation is lock-free using CAS with optimized byte comparison.
 func (h *OptimizedHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
 	bucketIdx := h.hashOptimized(key)
 	bucket := &h.buckets[bucketIdx]
 
-	// First, try to find existing entry
 	for n := bucket.Load(); n != nil; n = n.next.Load() {
 		if bytesEqualOptimized(n.entry.Key(), key) {
 			return n.entry
 		}
 	}
 
-	// Create new entry and node
 	entry := mvcc.NewEntry[V](key)
 	newNode := &node[V]{
 		entry: entry,
 	}
 
-	// Try to insert at head of bucket
 	for {
 		oldHead := bucket.Load()
 		newNode.next.Store(oldHead)
@@ -156,7 +150,6 @@ func (h *OptimizedHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
 			return entry
 		}
 
-		// CAS failed, check if someone else inserted our key
 		for n := bucket.Load(); n != nil; n = n.next.Load() {
 			if bytesEqualOptimized(n.entry.Key(), key) {
 				return n.entry
@@ -183,80 +176,21 @@ func (h *OptimizedHashIndex[V]) Delete(key []byte) bool {
 	bucketIdx := h.hashOptimized(key)
 	bucket := &h.buckets[bucketIdx]
 
-	// Find the node to delete
 	var prev *node[V]
 	for n := bucket.Load(); n != nil; n = n.next.Load() {
 		if bytesEqualOptimized(n.entry.Key(), key) {
-			// Remove the node from the list
 			if prev == nil {
-				// Node is at the head of the bucket
 				if bucket.CompareAndSwap(n, n.next.Load()) {
 					return true
 				}
 			} else {
-				// Node is in the middle or end of the bucket
 				if prev.next.CompareAndSwap(n, n.next.Load()) {
 					return true
 				}
 			}
-			// CAS failed, retry
 			return h.Delete(key)
 		}
 		prev = n
 	}
 	return false
-}
-
-// hashOptimized uses an optimized hash function
-func (h *OptimizedHashIndex[V]) hashOptimized(key []byte) uint64 {
-	// Use FNV-1a hash for better distribution
-	const (
-		offset64 = 14695981039346656037
-		prime64  = 1099511628211
-	)
-
-	hash := uint64(offset64)
-	for _, b := range key {
-		hash ^= uint64(b)
-		hash *= prime64
-	}
-	return hash % uint64(len(h.buckets))
-}
-
-// Size returns the number of buckets in the index.
-func (h *OptimizedHashIndex[V]) Size() uint64 {
-	return h.size
-}
-
-// BucketCount returns the number of entries in a specific bucket (for debugging).
-func (h *OptimizedHashIndex[V]) BucketCount(bucketIdx uint64) int {
-	if bucketIdx >= h.size {
-		return 0
-	}
-
-	count := 0
-	for n := h.buckets[bucketIdx].Load(); n != nil; n = n.next.Load() {
-		count++
-	}
-	return count
-}
-
-// ForEach iterates over all entries in the index, calling fn for each entry.
-// The iteration stops if fn returns false.
-func (h *OptimizedHashIndex[V]) ForEach(fn func(key []byte, entry *mvcc.Entry[V]) bool) {
-	for i := uint64(0); i < h.size; i++ {
-		bucket := h.buckets[i].Load()
-		if bucket == nil {
-			continue
-		}
-
-		// Iterate over all nodes in the bucket
-		current := bucket
-		for current != nil {
-			if !fn(current.entry.Key(), current.entry) {
-				return // Stop iteration if callback returns false
-			}
-			current = current.next.Load()
-		}
-	}
 }
