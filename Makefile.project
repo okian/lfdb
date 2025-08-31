@@ -1,0 +1,69 @@
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+# Include the generic Makefile
+include Makefile.generic
+
+.PHONY: fuzz property linearizability race-detection gc test-all all-tests run-all
+
+# Run fuzz tests
+fuzz:
+	go test -fuzz=FuzzBasicOperations -fuzztime=20s ./tests/...
+	go test -fuzz=FuzzConcurrentOperations -fuzztime=20s ./tests/...
+	go test -fuzz=FuzzSnapshotOperations -fuzztime=20s ./tests/...
+	go test -fuzz=FuzzTransactionOperations -fuzztime=20s ./tests/...
+	go test -fuzz=FuzzRandomSequence -fuzztime=20s ./tests/...
+	go test -fuzz=FuzzEpochReclamation -fuzztime=20s ./tests/...
+
+# Run property-based tests
+property:
+	go test -v -run TestPropertyBased ./...
+
+# Run linearizability tests
+linearizability:
+	go test -v -run TestLinearizability ./...
+
+# Run race detection tests
+race-detection:
+	go test -race -v -run TestRaceDetection ./...
+
+# Run GC tests
+gc:
+	go test -v -run TestGC ./...
+
+# Run all comprehensive tests
+test-all: test race fuzz property linearizability race-detection gc
+
+# Run all tests (comprehensive)
+all-tests: test race fuzz property linearizability race-detection gc bench
+
+# Run all basic tests and benchmarks
+run-all: test race bench
+
+# Override help to include project-specific commands
+help:
+	@echo "Available commands:"
+	@echo ""
+	@echo "Generic commands (from Makefile.generic):"
+	@echo "  test          - Run all tests"
+	@echo "  race          - Run tests with race detector"
+	@echo "  bench         - Run benchmarks"
+	@echo "  format        - Format code with goimports"
+	@echo "  lint          - Run golangci-lint"
+	@echo "  security      - Run gosec security scanner"
+	@echo "  vulncheck     - Run vulnerability check"
+	@echo "  lint-all      - Run all linting and security checks"
+
+	@echo "  check         - Run lint and tests"
+	@echo "  build         - Build all binaries"
+	@echo "  clean         - Clean build artifacts"
+	@echo "  deps          - Install Go dependencies"
+	@echo ""
+	@echo "Project-specific commands:"
+	@echo "  fuzz          - Run fuzz tests"
+	@echo "  property      - Run property-based tests"
+	@echo "  linearizability - Run linearizability tests"
+	@echo "  race-detection - Run race detection tests"
+	@echo "  gc            - Run garbage collection tests"
+	@echo "  test-all      - Run all comprehensive tests"
+	@echo "  all-tests     - Run all tests including benchmarks"
+	@echo "  run-all       - Run basic tests and benchmarks"

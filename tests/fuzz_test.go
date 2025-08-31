@@ -3,10 +3,11 @@
 package tests
 
 import (
-	"context"
-	core "github.com/kianostad/lfdb/internal/core"
 	"bytes"
+	"context"
 	"testing"
+
+	core "github.com/kianostad/lfdb/internal/core"
 )
 
 // FuzzBasicOperations fuzzes basic database operations

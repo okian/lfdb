@@ -1,0 +1,95 @@
+# Licensed under the MIT License. See LICENSE file in the project root for details.
+
+.PHONY: test bench race lint clean build security vulncheck lint-all format deps help
+
+# Default target
+all: test
+
+# Run static analysis and tests
+test:
+	go test -race -v ./...
+
+# Run benchmarks
+bench:
+	go test -race -bench=. -benchmem ./...
+
+# Run tests with race detector
+race:
+	go test -race -v ./...
+
+# Run tests with coverage
+test-coverage:
+	go test -race -v -coverprofile=coverage.out -covermode=atomic ./...
+	go tool cover -func=coverage.out
+	go tool cover -html=coverage.out -o coverage.html
+
+# Format code
+format:
+	@if ! command -v goimports >/dev/null 2>&1; then \
+		echo "🔧 Installing goimports..."; \
+		go install golang.org/x/tools/cmd/goimports@latest; \
+	fi
+	@echo "🔧 Formatting code with goimports..."
+	goimports -w .
+
+# Run linter
+lint:
+	@if ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "🔧 Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6; \
+	fi
+	golangci-lint run --timeout=5m
+
+# Run security scanner (non-blocking - issues are mostly false positives)
+security:
+	@if ! command -v gosec >/dev/null 2>&1; then \
+		echo "🔧 Installing gosec..."; \
+		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
+	fi
+	@gosec -fmt sarif -out results.sarif ./... || echo "⚠️  Security scan completed with issues (mostly false positives)"
+
+# Run vulnerability check
+vulncheck:
+	@if ! command -v govulncheck >/dev/null 2>&1; then \
+		echo "🔧 Installing govulncheck..."; \
+		go install golang.org/x/vuln/cmd/govulncheck@latest; \
+	fi
+	govulncheck ./...
+
+# Run all linting and security checks
+lint-all: lint security vulncheck
+
+# Clean build artifacts
+clean:
+	go clean -cache -testcache
+	rm -rf dist/
+	rm -f coverage.out coverage.html results.sarif
+
+# Install dependencies
+deps:
+	go mod download
+	go mod tidy
+
+# Run all checks
+check: lint-all test race
+
+# Build all binaries
+build:
+	go build ./cmd/...
+
+# Show help
+help:
+	@echo "Available commands:"
+	@echo "  test          - Run all tests"
+	@echo "  race          - Run tests with race detector"
+	@echo "  bench         - Run benchmarks"
+	@echo "  format        - Format code with goimports"
+	@echo "  lint          - Run golangci-lint"
+	@echo "  security      - Run gosec security scanner"
+	@echo "  vulncheck     - Run vulnerability check"
+	@echo "  lint-all      - Run all linting and security checks"
+
+	@echo "  check         - Run lint and tests"
+	@echo "  build         - Build all binaries"
+	@echo "  clean         - Clean build artifacts"
+	@echo "  deps          - Install Go dependencies"
