@@ -1,12 +1,16 @@
 # Licensed under the MIT License. See LICENSE file in the project root for details.
 
-.PHONY: test bench race lint clean
+.PHONY: test vet bench race lint clean build
 
 # Default target
 all: test
 
-# Run tests
-test:
+# Run go vet static analysis
+vet:
+	go vet ./...
+
+# Run static analysis and tests
+test: vet
 	go test -race -v -p=1 ./...
 
 # Run benchmarks
@@ -54,19 +58,6 @@ test-all: test race fuzz property linearizability race-detection gc
 # Run all tests (comprehensive)
 all-tests: test race fuzz property linearizability race-detection gc bench
 
-# Run throughput tests
-throughput:
-	./scripts/run_throughput_tests.sh basic
-
-throughput-optimized:
-	go run ./cmd/throughput_optimized -duration=30s -goroutines=8 -batch-size=100
-
-throughput-all:
-	./scripts/run_throughput_tests.sh all
-
-throughput-realtime:
-	./scripts/run_throughput_tests.sh realtime
-
 # Run all basic tests and benchmarks
 run-all: test race bench
 
@@ -84,14 +75,11 @@ help:
 	@echo "  test-all      - Run all comprehensive tests"
 	@echo "  all-tests     - Run all tests including benchmarks"
 	@echo "  run-all       - Run basic tests and benchmarks"
-	@echo "  throughput    - Run basic throughput test"
-	@echo "  throughput-optimized - Run optimized throughput test"
-	@echo "  throughput-all - Run all throughput tests"
-	@echo "  throughput-realtime - Run real-time throughput test"
 	@echo "  lint          - Run golangci-lint"
 	@echo "  security      - Run gosec security scanner"
 	@echo "  vulncheck     - Run vulnerability check"
 	@echo "  lint-all      - Run all linting and security checks"
+	@echo "  vet           - Run go vet static analysis"
 	@echo "  check         - Run lint and tests"
 	@echo "  build         - Build all binaries"
 	@echo "  clean         - Clean build artifacts"
@@ -124,16 +112,14 @@ deps:
 # Run all checks
 check: lint-all test race
 
-# Build all binaries
-build:
+# Build all binaries after vetting
+build: vet
 	go build ./cmd/...
-	go build -o bin/throughput ./cmd/throughput
-	go build -o bin/throughput-optimized ./cmd/throughput_optimized
 
 # Install tools
 tools:
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+	go install github.com/securego/gosec/v2/cmd/gosec@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
 	pip install pre-commit
 	pre-commit install
