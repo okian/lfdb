@@ -1,7 +1,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
 //go:build arm64 && !purego
-// +build arm64,!purego
 
 #include "textflag.h"
 

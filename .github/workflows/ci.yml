@@ -43,8 +43,11 @@ jobs:
           - goarch: amd64
             goamd64: '1'
           - goarch: amd64
+            goamd64: '3'
+          - goarch: amd64
             goamd64: '4'
           - goarch: arm64
+            goamd64: '1'
             exec: /usr/bin/qemu-aarch64-static
     steps:
       - name: Checkout code
@@ -153,8 +156,11 @@ jobs:
           - goarch: amd64
             goamd64: '1'
           - goarch: amd64
+            goamd64: '3'
+          - goarch: amd64
             goamd64: '4'
           - goarch: arm64
+            goamd64: '1'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

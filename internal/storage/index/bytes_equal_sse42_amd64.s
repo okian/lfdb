@@ -1,7 +1,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for details.
 
-//go:build amd64 && !purego
-// +build amd64,!purego
+//go:build amd64 && !purego && (goamd64.v3 || goamd64.v4)
 
 #include "textflag.h"
 

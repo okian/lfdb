@@ -70,18 +70,6 @@ func bytesEqualOptimized(a, b []byte) bool {
 	return bytesEqualScalar(a, b)
 }
 
-// bytesEqualAVX2 uses AVX2 instructions for 32-byte aligned comparisons
-// Assembly implementation is in bytes_equal_avx2_amd64.s
-func bytesEqualAVX2(a, b []byte) bool
-
-// bytesEqualSSE42 uses SSE4.2 instructions for 16-byte aligned comparisons
-// Assembly implementation is in bytes_equal_sse42_amd64.s
-func bytesEqualSSE42(a, b []byte) bool
-
-// bytesEqualSSE2 uses SSE2 instructions for 16-byte aligned comparisons
-// Assembly implementation is in bytes_equal_sse2_amd64.s
-func bytesEqualSSE2(a, b []byte) bool
-
 // bytesEqualNEON is a stub on amd64 and falls back to the scalar path.
 //
 //nolint:unused
