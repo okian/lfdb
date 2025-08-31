@@ -52,35 +52,35 @@ func calculateOptimalBuckets(dataSize int) uint64 {
 		targetSize = 1 << 20
 	}
 
-	return uint64(targetSize)
+	return uint64(targetSize) // #nosec G115
 }
 
 // GetOrCreate finds an entry for the given key, or creates a new one if it doesn't exist.
 // This operation is lock-free and may trigger resizing.
 func (h *DynamicHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
-    // Check if we need to resize
-    h.checkResize()
+	// Check if we need to resize
+	h.checkResize()
 
-    // Use read lock for accessing the hash index
-    h.resizeMu.RLock()
-    existingEntry := h.HashIndex.Get(key)
-    h.resizeMu.RUnlock()
+	// Use read lock for accessing the hash index
+	h.resizeMu.RLock()
+	existingEntry := h.HashIndex.Get(key)
+	h.resizeMu.RUnlock()
 
-    if existingEntry != nil {
-        return existingEntry
-    }
+	if existingEntry != nil {
+		return existingEntry
+	}
 
-    // Use read lock for creating new entry
-    h.resizeMu.RLock()
-    entry, created := h.HashIndex.GetOrCreateWithFlag(key)
-    h.resizeMu.RUnlock()
+	// Use read lock for creating new entry
+	h.resizeMu.RLock()
+	entry, created := h.HashIndex.GetOrCreateWithFlag(key)
+	h.resizeMu.RUnlock()
 
-    // Increment entry count only for new entries
-    if created {
-        h.entryCount.Add(1)
-    }
+	// Increment entry count only for new entries
+	if created {
+		h.entryCount.Add(1)
+	}
 
-    return entry
+	return entry
 }
 
 // checkResize checks if the index needs to be resized based on load factor
@@ -128,15 +128,15 @@ func (h *DynamicHashIndex[V]) migrateEntries(newIndex *HashIndex[V]) {
 	// This is a simplified migration - in a production system,
 	// you'd want to do this incrementally to avoid blocking
 
-    for i := range h.buckets {
-        bucket := &h.buckets[i]
-        for node := bucket.Load(); node != nil; node = node.next.Load() {
-            if node.entry != nil {
-                // Insert existing entry pointer into the new index to preserve data
-                newIndex.InsertExistingEntry(node.entry)
-            }
-        }
-    }
+	for i := range h.buckets {
+		bucket := &h.buckets[i]
+		for node := bucket.Load(); node != nil; node = node.next.Load() {
+			if node.entry != nil {
+				// Insert existing entry pointer into the new index to preserve data
+				newIndex.InsertExistingEntry(node.entry)
+			}
+		}
+	}
 }
 
 // GetCurrentLoad returns the current load factor

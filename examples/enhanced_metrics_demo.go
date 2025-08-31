@@ -3,8 +3,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"time"
 
 	"github.com/kianostad/lfdb/internal/monitoring/metrics"
@@ -31,8 +32,10 @@ func enhancedMetricsDemo() {
 	// Record operations with variable latencies
 	for i := 0; i < 100; i++ {
 		// Simulate variable latency (50-500μs for gets, 100-1000μs for puts)
-		getLatency := time.Duration(50+rand.Intn(450)) * time.Microsecond
-		putLatency := time.Duration(100+rand.Intn(900)) * time.Microsecond
+		getRand, _ := rand.Int(rand.Reader, big.NewInt(450))
+		putRand, _ := rand.Int(rand.Reader, big.NewInt(900))
+		getLatency := time.Duration(50+getRand.Int64()) * time.Microsecond
+		putLatency := time.Duration(100+putRand.Int64()) * time.Microsecond
 
 		metrics.RecordGet(getLatency)
 		metrics.RecordPut(putLatency)

@@ -93,8 +93,8 @@ func bytesEqualScalar(a, b []byte) bool {
 	}
 	if lenA >= wordSize {
 		for i := 0; i+wordSize <= lenA; i += wordSize {
-			va := *(*uint64)(unsafe.Pointer(&a[i]))
-			vb := *(*uint64)(unsafe.Pointer(&b[i]))
+			va := *(*uint64)(unsafe.Pointer(&a[i])) // #nosec G103
+			vb := *(*uint64)(unsafe.Pointer(&b[i])) // #nosec G103
 			if va != vb {
 				return false
 			}
@@ -133,7 +133,7 @@ func (h *OptimizedHashIndex[V]) hashOptimized(key []byte) uint64 {
 func (h *OptimizedHashIndex[V]) hashShort(key []byte) uint64 {
 	var hash uint64
 	for i, b := range key {
-		hash = hash*31 + uint64(b) + uint64(i)
+		hash = hash*31 + uint64(b) + uint64(i) // #nosec G115
 	}
 	return hash & h.mask
 }

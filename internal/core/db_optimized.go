@@ -120,7 +120,9 @@ func (d *OptimizedDB[K, V]) GetMetrics() metrics.MetricsSnapshot {
 
 // Truncate removes all data from the database.
 func (d *OptimizedDB[K, V]) Truncate() error {
-	d.Flush()
+	if err := d.Flush(); err != nil {
+		return fmt.Errorf("flush failed: %v", err)
+	}
 	newIndex := index.NewOptimizedHashIndex[V](1024)
 	d.index = newIndex
 	d.clock.Store(0)
