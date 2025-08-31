@@ -87,11 +87,11 @@ func (h *DynamicHashIndex[V]) GetOrCreate(key []byte) *mvcc.Entry[V] {
 func (h *DynamicHashIndex[V]) checkResize() {
 	// Use read lock to safely read size and maxLoad
 	h.resizeMu.RLock()
-	currentLoad := float64(h.entryCount.Load()) / float64(h.size)
-	maxLoad := h.maxLoad
+	currentEntries := float64(h.entryCount.Load())
+	maxEntries := h.maxLoad // max allowed entries before resize
 	h.resizeMu.RUnlock()
 
-	if currentLoad > maxLoad {
+	if currentEntries > maxEntries {
 		h.resize()
 	}
 }
@@ -103,8 +103,8 @@ func (h *DynamicHashIndex[V]) resize() {
 	defer h.resizeMu.Unlock()
 
 	// Double-check load factor after acquiring lock
-	currentLoad := float64(h.entryCount.Load()) / float64(h.size)
-	if currentLoad <= h.maxLoad {
+	currentEntries := float64(h.entryCount.Load())
+	if currentEntries <= h.maxLoad {
 		return // Another goroutine already resized
 	}
 
